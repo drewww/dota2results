@@ -3,6 +3,7 @@ var request = require('request'),
 	querystring = require('querystring'),
 	_ = require('underscore')._,
 	dazzle = require('dazzle'),
+	EventEmitter = require('events').EventEmitter,
 	twit = require('twit');
 
 var config = require('./config.json');
@@ -42,8 +43,8 @@ exports.ResultsServer.prototype = {
 	start: function() {
 		winston.info("START ResultsServer");
 
+		this.on("leagues:update", this.checkRecentLeagueGames);
 		this.updateLeagueListing();
-		this.updateLiveGamesListing();
 	},
 
 	stop: function() {
@@ -56,6 +57,12 @@ exports.ResultsServer.prototype = {
 
 	},
 
+	checkRecentLeagueGames: function() {
+		_.each(this.leagues, _.bind(function(league) {
+			winston.info("loading league " + JSON.stringify(league));
+			this.getLeagueMatches(league.leagueid);
+		}, this));
+	},
 
 	updateLeagueListing: function() {
 		this.api().getLeagueListing(_.bind(function(err, res) {
@@ -66,6 +73,8 @@ exports.ResultsServer.prototype = {
 
 			this.leagues = res.leagues;
 			this.lastLeagueUpdate = new Date().getTime();
+
+			this.emit("leagues:update");
 		}, this));
 	},
 
@@ -79,7 +88,28 @@ exports.ResultsServer.prototype = {
 			this.liveGames = res;
 			this.lastLiveGamesUpdate = new Date().getTime();
 
-			winston.info(res);
+		}, this));
+	},
+
+	getLeagueMatches: function(leagueId) {
+		this.api().getMatchHistory({
+			num_results: 1,
+			league_id: leagueId
+		}, _.bind(function(err, res) {
+			if(err) {
+				winston.error("error loading matches: " + err);
+				return;
+			}
+
+			if(res.num_matches == 0) {
+				winston.info("No matches returned for league_id: " + leagueId);
+				return;
+			}
+
+			_.each(res.matches, function(match) {
+				winston.info(match)
+			});
+
 		}, this));
 	},
 
@@ -123,6 +153,7 @@ exports.ResultsServer.prototype = {
 	}
 };
 
+_.extend(exports.ResultsServer.prototype, EventEmitter.prototype);
 
 
 
