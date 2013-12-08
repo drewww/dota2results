@@ -24,6 +24,10 @@ var leagues;
 
 // lifecycle: look at 
 
+// option 1:
+//	every N seconds, look at one match from every league and spit it out
+//	
+
 
 exports.ResultsServer = function() {
 
@@ -36,8 +40,14 @@ exports.ResultsServer.prototype = {
 	liveGames: null,
 	lastLiveGamesUpdate: null,
 
+	mostRecentLeagueMatchIds: null,
+
 	init: function() {
 		winston.info("INIT ResultsServer");
+
+		// a hash from league_id to most recently
+		// updated match_id for that league.
+		this.mostRecentLeagueMatchIds = {};
 	},
 
 	start: function() {
@@ -59,7 +69,7 @@ exports.ResultsServer.prototype = {
 
 	checkRecentLeagueGames: function() {
 		_.each(this.leagues, _.bind(function(league) {
-			winston.info("loading league " + JSON.stringify(league));
+			winston.info("loading league " + league.name);
 			this.getLeagueMatches(league.leagueid);
 		}, this));
 	},
@@ -92,8 +102,10 @@ exports.ResultsServer.prototype = {
 	},
 
 	getLeagueMatches: function(leagueId) {
+
+		winston.info("getting league matches for id " + leagueId);
 		this.api().getMatchHistory({
-			num_results: 1,
+			matches_requested: 5,
 			league_id: leagueId
 		}, _.bind(function(err, res) {
 			if(err) {
@@ -101,13 +113,16 @@ exports.ResultsServer.prototype = {
 				return;
 			}
 
-			if(res.num_matches == 0) {
+			if(res.num_results == 0) {
 				winston.info("No matches returned for league_id: " + leagueId);
 				return;
 			}
 
+			var league = _.find(this.leagues, function(league) { return league.leagueid==leagueId});
+
+			winston.info("Found " + res.num_results + " results for " + league.name);
 			_.each(res.matches, function(match) {
-				winston.info(match)
+				winston.info("\t" + match.match_id + "/" + match.match_seq_num + " @" + new Date(match.start_time).toISOString());
 			});
 
 		}, this));
