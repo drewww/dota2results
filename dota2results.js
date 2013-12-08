@@ -21,65 +21,142 @@ var leagues;
 // 
 // DITCH MATCH HISTORY BECAUSE IT LIES
 
-api.getLeagueListing(function(err, res) {
-	leagues = res.leagues;
-	winston.info("loaded " + leagues.length + " leagues");
+// lifecycle: look at 
 
-	var now = Math.floor(new Date().getTime()/1000);
-	var then = now-(60*60*24);
 
-	winston.info("requesting matches between: " + now + " and " + then);
-	api.getMatchHistory({
-		tournament_games_only:1,
-		// date_max: now,
-		// date_min: then
-	}, function(err, res) {
+exports.ResultsServer = function() {
 
-		if(err) {
-			winston.err(err);
-			return;
-		}
+}
 
-		if(res.num_results==0) {
-			winston.info("No matches within the last " + (now - then) + " seconds.");
-			return;
-		}
+exports.ResultsServer.prototype = {
+	leagues: null,
+	lastLeagueUpdate: null,
 
-		_.each(res.matches, function(match) {
-			// now get the tournament details
-			winston.info("loading details for match " + match.match_id);
-			api.getMatchDetails(match.match_id, function(err, match) {
-				var teams = [];
-				_.each(["radiant", "dire"], function(name) {
-					var team = {};
-					_.each(["name", "team_id", "logo", "team_complete"], function(param) {
-						team[param] = match[name+"_"+param];
-					});
-					team["side"] = name;
+	liveGames: null,
+	lastLiveGamesUpdate: null,
 
-					teams.push(team);
-					winston.info(team);
+	init: function() {
+		winston.info("INIT ResultsServer");
+	},
+
+	start: function() {
+		winston.info("START ResultsServer");
+
+		this.updateLeagueListing();
+		this.updateLiveGamesListing();
+	},
+
+	stop: function() {
+		winston.info("STOP ResultsServer");
+
+	},
+
+	destroy: function() {
+		winston.info("DESTROY ResultsServer");
+
+	},
+
+
+	updateLeagueListing: function() {
+		this.api().getLeagueListing(_.bind(function(err, res) {
+			if(err) {
+				winston.error("Error loading league listing: " + err);
+				return;
+			}
+
+			this.leagues = res.leagues;
+			this.lastLeagueUpdate = new Date().getTime();
+		}, this));
+	},
+
+	updateLiveGamesListing: function() {
+		this.api().getLiveLeagueGames(_.bind(function(err, res) {
+			if(err) {
+				winston.error("Error loading live league games: " + err);
+				return;
+			}
+
+			this.liveGames = res;
+			this.lastLiveGamesUpdate = new Date().getTime();
+
+			winston.info(res);
+		}, this));
+	},
+
+	processFinishedMatch: function(matchId) {
+		this.api().getMatchDetails(matchId, function(err, match) {
+
+			if(err) {
+				winston.error("error loading match: " + err);
+				return;
+			}
+
+			var teams = [];
+			_.each(["radiant", "dire"], function(name) {
+				var team = {};
+				_.each(["name", "team_id", "logo", "team_complete"], function(param) {
+					team[param] = match[name+"_"+param];
 				});
+				team["side"] = name;
 
-				if(!match.radiant_win) {
-					var winner = teams[1];
-					teams[1] = teams[0];
-					teams[0] = winner;
-				}
-
-				var durationString = Math.floor(match.duration/60) + ":" + match.duration%60;
-				var league = _.find(leagues, function(league) {
-					return league.leagueid==match.leagueid;
-				});
-
-
-				// var league = {name:"test"};
-
-				winston.info(teams[0].name + " DEF " + teams[1].name + "(" + durationString + ") in " + league.name);
+				teams.push(team);
+				winston.info(team);
 			});
-		})
-	});
-});
+
+			if(!match.radiant_win) {
+				var winner = teams[1];
+				teams[1] = teams[0];
+				teams[0] = winner;
+			}
+
+			var durationString = Math.floor(match.duration/60) + ":" + match.duration%60;
+			var league = _.find(leagues, function(league) {
+				return league.leagueid==match.leagueid;
+			});
+
+			winston.info(teams[0].name + " DEF " + teams[1].name + "(" + durationString + ") in " + league.name);
+		});
+	},
+
+	api: function() {
+		return new dazzle(config.steam.key);
+	}
+};
+
+
+
+
+// api.getLeagueListing(function(err, res) {
+// 	leagues = res.leagues;
+// 	winston.info("loaded " + leagues.length + " leagues");
+
+// 	var now = Math.floor(new Date().getTime()/1000);
+// 	var then = now-(60*60*24);
+
+// 	winston.info("requesting matches between: " + now + " and " + then);
+// 	api.getMatchHistory({
+// 		tournament_games_only:1,
+// 		// date_max: now,
+// 		// date_min: then
+// 	}, function(err, res) {
+
+// 		if(err) {
+// 			winston.error(err);
+// 			return;
+// 		}
+
+// 		if(res.num_results==0) {
+// 			winston.info("No matches within the last " + (now - then) + " seconds.");
+// 			return;
+// 		}
+
+// 		_.each(res.matches, function(match) {
+// 			// now get the tournament details
+// 			winston.info("loading details for match " + match.match_id);
+
+// 		})
+// 	});
+// });
 
 
 
@@ -88,5 +165,14 @@ api.getLeagueListing(function(err, res) {
 // TOURNAMENT GAME N: TEAM def TEAM in TIME
 // 
 
+var server = new exports.ResultsServer();
 
-winston.info("dota2results ENDING");
+server.init();
+server.start();
+
+
+process.on('uncaughtException', function(err) {
+  winston.error(err.stack);
+});
+
+
