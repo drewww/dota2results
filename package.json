@@ -20,7 +20,8 @@
     "twit": "1.1.x",
     "winston": "0.7.x",
     "request": "2.x",
-    "dazzle": "*"
+    "dazzle": "*",
+    "underscore": "*"
   },
   "license": "GPL v2",
   "engines": {
