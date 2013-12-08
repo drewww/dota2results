@@ -19,7 +19,8 @@
   "dependencies" : {
     "twit": "1.1.x",
     "winston": "0.7.x",
-    "request": "2.x"
+    "request": "2.x",
+    "dazzle": "*"
   },
   "license": "GPL v2",
   "engines": {
