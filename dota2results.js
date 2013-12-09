@@ -128,12 +128,12 @@ exports.ResultsServer.prototype = {
 	logRecentMatch: function(match,league, suppressProcessing) {
 		// first, check it against the league listing.
 		if(league.mostRecentMatchId==match.match_id) {
-			winston.info("Match_id matches most recent id for league.")
+			winston.debug("Match_id matches most recent id for league.")
 			return;
 		} else {
 			league.mostRecentMatchId = match.match_id;
 
-			winston.info("Found new match for league " + league.name);
+			winston.debug("Found new match for league " + league.name);
 			if(suppressProcessing) {
 				return;
 			}
@@ -198,7 +198,7 @@ exports.ResultsServer.prototype = {
 	getMostRecentLeagueMatch: function(leagueId, cb) {
 		var league = this.leagues[leagueId];
 
-		winston.info("Getting most recent match for " + league.name);
+		winston.debug("Getting most recent match for " + league.name);
 
 		this.api().getMatchHistory({
 			matches_requested: 1,
@@ -210,15 +210,15 @@ exports.ResultsServer.prototype = {
 			}
 
 			if(res.total_results == 0) {
-				winston.info("No matches returned for league_id: " + league.name);
+				winston.warn("No matches returned for league_id: " + league.name);
 				return;
 			} else {
-				winston.info(res.total_results + " matches found for " + league.name);
+				winston.debug(res.total_results + " matches found for " + league.name);
 			}
 
 			// there should only be 1 match, since we only requested 1.
 			var match = res.matches[0];
-			winston.info("\t" + match.match_id + "/" + match.match_seq_num + " @" + new Date(match.start_time*1000).toISOString());
+			winston.debug("\t" + match.match_id + "/" + match.match_seq_num + " @" + new Date(match.start_time*1000).toISOString());
 			
 			// run the callback if present.
 			cb && cb(match);
@@ -252,7 +252,14 @@ exports.ResultsServer.prototype = {
 			var durationString = Math.floor(match.duration/60) + ":" + match.duration%60;
 			var league = this.leagues[match.leagueid];
 
+
 			var tweetString = teams[0].name + " DEF " + teams[1].name + " (" + durationString + ") in " + league.name;
+
+			if(_.isUndefined(teams[0].name) || _.isUndefined(teams[1].name)) {
+				winston.warn("Found team with undefined name. Probably a pickup league, ignoring. Tweet would have been: " + tweetString);
+				return;
+			}
+
 
 			if(tweetString.length > 140) {
 				tweetString = tweetString.substring(0, 139);
@@ -263,7 +270,7 @@ exports.ResultsServer.prototype = {
 				if (err) {
 	  				winston.error("Error posting tweet: " + err);
 				} else {
-	  				winston.info("Twitter reply: " + reply + " (err: " + err + ")");
+	  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
 				}
   			});
 		}, this));
