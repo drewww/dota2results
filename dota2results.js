@@ -260,7 +260,11 @@ exports.ResultsServer.prototype = {
 
 			winston.info("TWEET: " + tweetString);
 			this.twitter.post('statuses/update', { status: tweetString }, function(err, reply) {
-  				winston.error("Error posting tweet: " + err);
+				if (err) {
+	  				winston.error("Error posting tweet: " + err);
+				} else {
+	  				winston.info("Twitter reply: " + reply + " (err: " + err + ")");
+				}
   			});
 		}, this));
 	},
