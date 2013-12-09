@@ -67,6 +67,13 @@ exports.ResultsServer.prototype = {
 	start: function() {
 		winston.info("START ResultsServer");
 
+		this.twitter = new twit({
+		    consumer_key:         config.twitter.consumer_key
+		  , consumer_secret:      config.twitter.consumer_secret
+		  , access_token:         config.twitter.access_token
+		  , access_token_secret:  config.twitter.access_token_secret
+		});
+
 		this.on("live-games:update", _.bind(function() {
 			var leagues = this.getLeaguesWithLiveGames();
 
@@ -103,7 +110,7 @@ exports.ResultsServer.prototype = {
 		// now kick off a periodic live games update.
 		this.updater = setInterval(_.bind(function() {
 			this.checkForLiveLeagueGames();
-			
+
 			this.starting = false;
 		}, this), 60*1000);
 	},
@@ -174,6 +181,8 @@ exports.ResultsServer.prototype = {
 			this.liveGames = res.games;
 			this.lastLiveGamesUpdate = new Date().getTime();
 
+			winston.info("Found " + this.liveGames.length + " active league games.");
+
 			this.emit("live-games:update");
 		}, this));
 	},
@@ -243,7 +252,16 @@ exports.ResultsServer.prototype = {
 			var durationString = Math.floor(match.duration/60) + ":" + match.duration%60;
 			var league = this.leagues[match.leagueid];
 
-			winston.info("TWEET: " + teams[0].name + " DEF " + teams[1].name + " (" + durationString + ") in " + league.name);
+			var tweetString = teams[0].name + " DEF " + teams[1].name + " (" + durationString + ") in " + league.name;
+
+			if(tweetString.length > 140) {
+				tweetString = tweetString.substring(0, 139);
+			}
+
+			winston.info("TWEET: " + tweetString);
+			this.twitter.post('statuses/update', { status: tweetString }, function(err, reply) {
+  				winston.error("Error posting tweet: " + err);
+  			});
 		}, this));
 	},
 
