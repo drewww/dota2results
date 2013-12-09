@@ -9,6 +9,7 @@ var request = require('request'),
 var config = require('./config.json');
 var api = new dazzle(config.steam.key);
 
+winston.cli();
 winston.info("dota2results STARTING");
 
 var leagues;
@@ -53,8 +54,18 @@ exports.ResultsServer.prototype = {
 	start: function() {
 		winston.info("START ResultsServer");
 
-		this.on("leagues:update", this.checkRecentLeagueGames);
+		// this.on("leagues:update", this.checkRecentLeagueGames);
 		this.updateLeagueListing();
+		this.on("live-games:update", _.bind(function() {
+			var leagues = this.getLiveLeagues();
+
+			_.each(leagues, _.bind(function(leagueId) {
+				this.getLeagueMatches(leagueId);
+			}, this));
+
+		}, this));
+
+		this.on("leagues:update", this.updateLiveGamesListing);
 	},
 
 	stop: function() {
@@ -81,7 +92,13 @@ exports.ResultsServer.prototype = {
 				return;
 			}
 
-			this.leagues = res.leagues;
+
+			var that = this;
+			this.leagues = {};
+			_.each(res.leagues, function(league) {
+				that.leagues[league.leagueid] = league;
+			});
+
 			this.lastLeagueUpdate = new Date().getTime();
 
 			this.emit("leagues:update");
@@ -95,17 +112,26 @@ exports.ResultsServer.prototype = {
 				return;
 			}
 
-			this.liveGames = res;
+			this.liveGames = res.games;
 			this.lastLiveGamesUpdate = new Date().getTime();
 
+			this.emit("live-games:update");
 		}, this));
+	},
+
+	getLiveLeagues: function() {
+		var leagueIds = _.map(this.liveGames, function(game) {
+			return game.league_id;
+		});
+
+		return leagueIds;
 	},
 
 	getLeagueMatches: function(leagueId) {
 
 		winston.info("getting league matches for id " + leagueId);
 		this.api().getMatchHistory({
-			matches_requested: 5,
+			matches_requested: 1,
 			league_id: leagueId
 		}, _.bind(function(err, res) {
 			if(err) {
@@ -113,16 +139,17 @@ exports.ResultsServer.prototype = {
 				return;
 			}
 
-			if(res.num_results == 0) {
+			var league = this.leagues[leagueId];
+
+			if(res.total_results == 0) {
 				winston.info("No matches returned for league_id: " + leagueId);
 				return;
+			} else {
+				winston.info(res.total_results + " matches found for " + league.name);
 			}
 
-			var league = _.find(this.leagues, function(league) { return league.leagueid==leagueId});
-
-			winston.info("Found " + res.num_results + " results for " + league.name);
 			_.each(res.matches, function(match) {
-				winston.info("\t" + match.match_id + "/" + match.match_seq_num + " @" + new Date(match.start_time).toISOString());
+				winston.info("\t" + match.match_id + "/" + match.match_seq_num + " @" + new Date(match.start_time*1000).toISOString());
 			});
 
 		}, this));
@@ -155,9 +182,7 @@ exports.ResultsServer.prototype = {
 			}
 
 			var durationString = Math.floor(match.duration/60) + ":" + match.duration%60;
-			var league = _.find(leagues, function(league) {
-				return league.leagueid==match.leagueid;
-			});
+			var league = this.leagues[match.league_id];
 
 			winston.info(teams[0].name + " DEF " + teams[1].name + "(" + durationString + ") in " + league.name);
 		});
