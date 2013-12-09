@@ -52,6 +52,8 @@ exports.ResultsServer.prototype = {
 
 	mostRecentLeagueMatchIds: null,
 
+	lastActiveLeagueIds: null,
+
 	starting: true,
 
 	updater: null,
@@ -62,6 +64,8 @@ exports.ResultsServer.prototype = {
 		// a hash from league_id to most recently
 		// updated match_id for that league.
 		this.mostRecentLeagueMatchIds = {};
+
+		this.lastActiveLeagueIds = [];
 	},
 
 	start: function() {
@@ -77,11 +81,21 @@ exports.ResultsServer.prototype = {
 		this.on("live-games:update", _.bind(function() {
 			var leagues = this.getLeaguesWithLiveGames();
 
-			_.each(leagues, _.bind(function(leagueId) {
+			// special case for first run
+			if(_.isNull(this.lastActiveLeagueIds)) {
+				this.lastActiveLeagueIds = leagues;
+			}
+
+			// always run on the last set not this set, because if a game
+			// just ended its league might not be in the current list
+			// anymore.
+			_.each(this.lastActiveLeagueIds, _.bind(function(leagueId) {
 				this.getMostRecentLeagueMatch(leagueId, _.bind(function(match) {
 					this.logRecentMatch(match, this.leagues[leagueId], false);
 				}, this));
 			}, this));
+
+			this.lastActiveLeagueIds = leagues;
 		}, this));
 
 		// when we get an update to the league listings (rare, but it happens) 
@@ -133,7 +147,7 @@ exports.ResultsServer.prototype = {
 		} else {
 			league.mostRecentMatchId = match.match_id;
 
-			winston.debug("Found new match for league " + league.name);
+			winston.info("Found new match for league " + league.name);
 			if(suppressProcessing) {
 				return;
 			}
@@ -252,8 +266,9 @@ exports.ResultsServer.prototype = {
 			var durationString = Math.floor(match.duration/60) + ":" + match.duration%60;
 			var league = this.leagues[match.leagueid];
 
+			winston.info("Processing match between " + teams[0].name + " and " + teams[1].name);
 
-			var tweetString = teams[0].name + " DEF " + teams[1].name + " (" + durationString + ") in " + league.name;
+			var tweetString = teams[0].name + " DEFEATS " + teams[1].name + " (" + durationString + ") in " + league.name;
 
 			if(_.isUndefined(teams[0].name) || _.isUndefined(teams[1].name)) {
 				winston.warn("Found team with undefined name. Probably a pickup league, ignoring. Tweet would have been: " + tweetString);
