@@ -89,13 +89,21 @@ exports.ResultsServer.prototype = {
 			// always run on the last set not this set, because if a game
 			// just ended its league might not be in the current list
 			// anymore.
-			_.each(this.lastActiveLeagueIds, _.bind(function(leagueId) {
-				this.getMostRecentLeagueMatch(leagueId, _.bind(function(match) {
-					this.logRecentMatch(match, this.leagues[leagueId], false);
-				}, this));
-			}, this));
 
-			this.lastActiveLeagueIds = leagues;
+			winston.info("Checking leagueIds: " + JSON.stringify(this.lastActiveLeagueIds));
+
+			// delay this check to give steam time to get the match up. Sometimes
+			// we check too quickly and we miss a new game because it's not in
+			// the match history yet.
+			setTimeout(_.bind(function() {
+				_.each(this.lastActiveLeagueIds, _.bind(function(leagueId) {
+					this.getMostRecentLeagueMatch(leagueId, _.bind(function(match) {
+						this.logRecentMatch(match, this.leagues[leagueId], false);
+					}, this));
+				}, this));
+
+				this.lastActiveLeagueIds = leagues;
+			}, this), 20000);
 		}, this));
 
 		// when we get an update to the league listings (rare, but it happens) 
