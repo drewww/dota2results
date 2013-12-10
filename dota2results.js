@@ -51,22 +51,18 @@ exports.ResultsServer.prototype = {
 	liveGames: null,
 	lastLiveGamesUpdate: null,
 
-	mostRecentLeagueMatchIds: null,
-
-	lastActiveLeagueIds: null,
-
 	starting: true,
 
 	updater: null,
 
+	activeLeagueIds: null,
+
 	init: function() {
 		winston.info("INIT ResultsServer");
 
-		// a hash from league_id to most recently
-		// updated match_id for that league.
-		this.mostRecentLeagueMatchIds = {};
-
-		this.lastActiveLeagueIds = [];
+		// maps leagueIds to times we last saw that league
+		// with an active game.
+		this.activeLeagueIds = {};
 
 		try {
 			this.leagues = require('./leagues.json');
@@ -89,28 +85,37 @@ exports.ResultsServer.prototype = {
 		this.on("live-games:update", _.bind(function() {
 			var leagues = this.getLeaguesWithLiveGames();
 
-			// special case for first run
-			if(_.isNull(this.lastActiveLeagueIds)) {
-				this.lastActiveLeagueIds = leagues;
-			}
+			_.each(leagues, _.bind(function(league) {
+				this.activeLeagueIds[league] = new Date().getTime();
+			}, this));
+
+			_.each(Object.keys(this.activeLeagueIds), _.bind(function(league) {
+				var lastSeen = this.activeLeagueIds[league];
+
+				var now = new Date().getTime();
+
+				// if it's been more than hour, stop checking.
+				if((now - lastSeen) > (1000*60*10)) {
+					delete this.activeLeagueIds[league];
+				}
+			}, this));
 
 			// always run on the last set not this set, because if a game
 			// just ended its league might not be in the current list
 			// anymore.
 
-			winston.info("Checking leagueIds: " + JSON.stringify(this.lastActiveLeagueIds));
+			winston.info("Checking leagueIds: " + JSON.stringify(Object.keys(this.activeLeagueIds)));
 
 			// delay this check to give steam time to get the match up. Sometimes
 			// we check too quickly and we miss a new game because it's not in
 			// the match history yet.
 			setTimeout(_.bind(function() {
-				_.each(this.lastActiveLeagueIds, _.bind(function(leagueId) {
+				_.each(Object.keys(this.activeLeagueIds), _.bind(function(leagueId) {
 					this.getMostRecentLeagueMatch(leagueId, _.bind(function(match) {
 						this.logRecentMatch(match, this.leagues[leagueId], false);
 					}, this));
 				}, this));
 
-				this.lastActiveLeagueIds = leagues;
 				this.saveLeagues();
 			}, this), 20000);
 		}, this));
@@ -143,6 +148,12 @@ exports.ResultsServer.prototype = {
 		// now kick off a periodic live games update.
 		this.updater = setInterval(_.bind(function() {
 			this.checkForLiveLeagueGames();
+
+			// once a day, do a full leaguelisting update
+			var now = new Date().getTime();
+			if(now - this.lastLeagueUpdate > (24*60*60*1000)) {
+				this.updateLeagueListing();
+			}
 
 			this.starting = false;
 		}, this), 60*1000);
@@ -230,7 +241,7 @@ exports.ResultsServer.prototype = {
 			return game.league_id;
 		});
 
-		return leagueIds;
+		return _.uniq(leagueIds);
 	},
 
 	getMostRecentLeagueMatch: function(leagueId, cb) {
