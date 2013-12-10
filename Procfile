@@ -1,1 +1,1 @@
-web: node dota2results.js
+worker: node dota2results.js
