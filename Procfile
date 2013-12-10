@@ -1,1 +1,1 @@
-bot: node dota2results.js
+web: node dota2results.js
