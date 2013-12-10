@@ -4,6 +4,7 @@ var request = require('request'),
 	_ = require('underscore')._,
 	dazzle = require('dazzle'),
 	EventEmitter = require('events').EventEmitter,
+	fs = require('fs'),
 	twit = require('twit');
 
 var config = require('./config.json');
@@ -66,6 +67,13 @@ exports.ResultsServer.prototype = {
 		this.mostRecentLeagueMatchIds = {};
 
 		this.lastActiveLeagueIds = [];
+
+		try {
+			this.leagues = require('./leagues.json');
+			this.lastLeagueUpdate = new Date().getTime();
+		} catch (e) {
+			this.leagues = {};
+		}
 	},
 
 	start: function() {
@@ -103,6 +111,7 @@ exports.ResultsServer.prototype = {
 				}, this));
 
 				this.lastActiveLeagueIds = leagues;
+				this.saveLeagues();
 			}, this), 20000);
 		}, this));
 
@@ -127,7 +136,9 @@ exports.ResultsServer.prototype = {
 			}, this));
 		}, this));
 
-		this.updateLeagueListing();
+		if(this.leagues.length==0) {
+			this.updateLeagueListing();
+		}
 
 		// now kick off a periodic live games update.
 		this.updater = setInterval(_.bind(function() {
@@ -190,7 +201,12 @@ exports.ResultsServer.prototype = {
 			this.lastLeagueUpdate = new Date().getTime();
 
 			this.emit("leagues:update");
+			this.saveLeagues();
 		}, this));
+	},
+
+	saveLeagues: function() {
+		fs.writeFile("leagues.json", JSON.stringify(this.leagues));
 	},
 
 	checkForLiveLeagueGames: function() {
