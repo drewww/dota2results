@@ -7,13 +7,8 @@ var request = require('request'),
 	fs = require('fs'),
 	twit = require('twit');
 
-var config = require('./config.json');
-var api = new dazzle(config.steam.key);
-
 winston.cli();
 winston.info("dota2results STARTING");
-
-var leagues;
 
 
 // basic arc of it:
@@ -65,7 +60,7 @@ exports.ResultsServer.prototype = {
 		this.activeLeagueIds = {};
 
 		try {
-			this.leagues = require('./leagues.json');
+			this.leagues = require('/tmp/leagues.json');
 			this.lastLeagueUpdate = new Date().getTime();
 		} catch (e) {
 			this.leagues = {};
@@ -76,10 +71,10 @@ exports.ResultsServer.prototype = {
 		winston.info("START ResultsServer");
 
 		this.twitter = new twit({
-		    consumer_key:         config.twitter.consumer_key
-		  , consumer_secret:      config.twitter.consumer_secret
-		  , access_token:         config.twitter.access_token
-		  , access_token_secret:  config.twitter.access_token_secret
+		    consumer_key:         process.env.TWITTER_CONSUMER_KEY
+		  , consumer_secret:      process.env.TWITTER_CONSUMER_SECRET
+		  , access_token:         process.env.TWITTER_ACCESS_TOKEN
+		  , access_token_secret:  process.env.TWITTER_ACCESS_TOKEN_SECRET
 		});
 
 		this.on("live-games:update", _.bind(function() {
@@ -155,8 +150,13 @@ exports.ResultsServer.prototype = {
 				this.updateLeagueListing();
 			}
 
-			this.starting = false;
+			
 		}, this), 60*1000);
+
+		// give it two minutes to startup
+		setTimeout(_.bind(function() {
+			this.starting = false;
+		}, this), 120*1000);
 	},
 
 	stop: function() {
@@ -217,7 +217,7 @@ exports.ResultsServer.prototype = {
 	},
 
 	saveLeagues: function() {
-		fs.writeFile("leagues.json", JSON.stringify(this.leagues));
+		fs.writeFile("/tmp/leagues.json", JSON.stringify(this.leagues));
 	},
 
 	checkForLiveLeagueGames: function() {
@@ -316,18 +316,18 @@ exports.ResultsServer.prototype = {
 			}
 
 			winston.info("TWEET: " + tweetString);
-			this.twitter.post('statuses/update', { status: tweetString }, function(err, reply) {
-				if (err) {
-	  				winston.error("Error posting tweet: " + err);
-				} else {
-	  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
-				}
-  			});
+			// this.twitter.post('statuses/update', { status: tweetString }, function(err, reply) {
+			// 	if (err) {
+	  // 				winston.error("Error posting tweet: " + err);
+			// 	} else {
+	  // 				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
+			// 	}
+  	// 		});
 		}, this));
 	},
 
 	api: function() {
-		return new dazzle(config.steam.key);
+		return new dazzle(process.env.STEAM_API_KEY);
 	}
 };
 
