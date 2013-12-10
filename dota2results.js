@@ -305,7 +305,14 @@ exports.ResultsServer.prototype = {
 				teams[0] = winner;
 			}
 
-			var durationString = Math.floor(match.duration/60) + ":" + match.duration%60;
+			var durationString = Math.floor(match.duration/60) + ":";
+
+			if(match.duration%60<10) {
+				durationString += "0" + match.duration%60;
+			} else {
+				durationString += match.duration%60;
+			}
+
 			var league = this.leagues[match.leagueid];
 
 			winston.info("Processing match between " + teams[0].name + " and " + teams[1].name);
