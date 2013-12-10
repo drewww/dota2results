@@ -155,6 +155,7 @@ exports.ResultsServer.prototype = {
 
 		// give it two minutes to startup
 		setTimeout(_.bind(function() {
+			winston.info("Unsetting starting; tweets will now send.");
 			this.starting = false;
 		}, this), 120*1000);
 	},
@@ -224,6 +225,12 @@ exports.ResultsServer.prototype = {
 		this.api().getLiveLeagueGames(_.bind(function(err, res) {
 			if(err) {
 				winston.error("Error loading live league games: " + err);
+				return;
+			}
+
+			if(_.isUndefined(res)) {
+				winston.warn("No live games found.");
+				res = {games:[]};
 				return;
 			}
 
@@ -316,13 +323,13 @@ exports.ResultsServer.prototype = {
 			}
 
 			winston.info("TWEET: " + tweetString);
-			// this.twitter.post('statuses/update', { status: tweetString }, function(err, reply) {
-			// 	if (err) {
-	  // 				winston.error("Error posting tweet: " + err);
-			// 	} else {
-	  // 				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
-			// 	}
-  	// 		});
+			this.twitter.post('statuses/update', { status: tweetString }, function(err, reply) {
+				if (err) {
+	  				winston.error("Error posting tweet: " + err);
+				} else {
+	  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
+				}
+  			});
 		}, this));
 	},
 
