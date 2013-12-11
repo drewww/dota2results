@@ -386,7 +386,7 @@ exports.ResultsServer.prototype = {
 	},
 
 	_tweet: function(string) {
-		this.twitter.post('statuses/update', { status: tweetString }, function(err, reply) {
+		this.twitter.post('statuses/update', { status: string }, function(err, reply) {
 				if (err) {
 	  				winston.error("Error posting tweet: " + err);
 				} else {
