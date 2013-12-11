@@ -33,6 +33,9 @@ exports.ResultsServer.prototype = {
 	leagues: null,
 	lastLeagueUpdate: null,
 
+	teams: null,
+	lastTeamUpdate: null,
+
 	liveGames: null,
 	lastLiveGamesUpdate: null,
 
@@ -55,6 +58,8 @@ exports.ResultsServer.prototype = {
 		} catch (e) {
 			this.leagues = {};
 		}
+
+		this.teams = {};
 
 		// auto-discard any super rapid tweets
 		// this will cull some of the potential horror of auto tweeting
@@ -164,6 +169,10 @@ exports.ResultsServer.prototype = {
 			this.updateLeagueListing();
 		}
 
+		if(Object.keys(this.teams).length==0) {
+			this.updateTeamListing();
+		}
+
 		// now kick off a periodic live games update.
 		this.updater = setInterval(_.bind(function() {
 			this.checkForLiveLeagueGames();
@@ -172,7 +181,8 @@ exports.ResultsServer.prototype = {
 			var now = new Date().getTime();
 			if(now - this.lastLeagueUpdate > (24*60*60*1000)) {
 				this.updateLeagueListing();
-			}		
+				this.updateTeamListing();
+			}
 		}, this), 60*1000);
 	},
 
@@ -200,6 +210,28 @@ exports.ResultsServer.prototype = {
 				this.processFinishedMatch(match.match_id);
 			}
 		}
+	},
+
+	updateTeamListing: function() {
+		winston.info("Updating team listing.");
+
+		this.api().getTeamInfoByTeamID({}, _.bind(function(err, res) {
+			if(err) {
+				winston.error("Error loading team listing: " + err);
+				return;
+			}
+
+			_.each(res.teams, _.bind(function(team) {
+				// skip any team that hasn't appeared in a league game.
+				if(!"league_id_0" in team) {
+					return;
+				}
+
+				this.teams[team.team_id] = team;
+			}, this));
+
+			winston.info("Loaded " + Object.keys(this.teams).length + " teams.");
+		}, this));
 	},
 
 	updateLeagueListing: function() {
