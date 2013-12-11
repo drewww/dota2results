@@ -111,6 +111,15 @@ exports.ResultsServer.prototype = {
 					// winston.info("Found " + matches.length + " matches for league: " + this.leagues[leagueId].name);
 
 					matchCounts[leagueId] = matches.length;
+
+					// if mostRecentMatchId is still undefined at this point, set it to 0.
+					// thus any subsequent game will trigger a tweet. It would be unset
+					// because no games have been recorded for that league yet.
+					if(_.isUndefined(league.mostRecentMatchId)) {
+						winston.info("Found no games for " + league.name + "; setting mostRecentMatchId to 0.");		
+						league.mostRecentMatchId = 0;
+					}
+
 					this.leagues[leagueId].init = false;
 
 					// ugly but I'm too lazy to work out the flow control here.
@@ -259,9 +268,13 @@ exports.ResultsServer.prototype = {
 	getRecentLeagueMatches: function(leagueId, cb) {
 		var league = this.leagues[leagueId];
 
+		// only look for games in the last few days
+		var date_min = (new Date().getTime()) - 60*60*24*1*1000;
+
 		winston.debug("Getting most recent matches for " + league.name);
 		this.api().getMatchHistory({
-			league_id: leagueId
+			league_id: leagueId,
+			date_min: Math.floor(date_min/1000)
 		}, _.bind(function(err, res) {
 			if(err) {
 				winston.error("error loading matches: " + err);
