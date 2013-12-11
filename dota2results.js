@@ -11,29 +11,19 @@ winston.cli();
 winston.info("dota2results STARTING");
 
 
-// basic arc of it:
-// on startup, load league listing.
-// check active games periodically, tracking match ids.
-// when a match id falls off the active games list, request its deets.
-// process it.
-// 
-// DITCH MATCH HISTORY BECAUSE IT LIES
 
-
-// Here's the flow:
+// Here's the overall system flow:
 // 	1. On startup, get a list of leagues. Store it.
-// 	2. Do a pass across each of those leagues and ask for most recent match.
-// 	3. Log those match ids as "most recent match seen" for each of the leagues.
-//  4. Start the main update loop, once every 60 seconds.
+//  2. Start the main update loop, once every 60 seconds.
 //		a. Check to see if our league listing is greater than 24 hours out of date.
 //			If it is, refresh it.
 //		b. Hit the live league games list. Not to farm match_ids (which aren't shown there)
 //			but to get a list of which leagues to check.
+//				- if we don't have a mostRecentMatchId for this league, suppress tweets for this
+//				  processing pass.
 //		c. Compare the list of most recent games for each of the live leagues to
 //			the list of last games we've seen for that league.
 //		d. If it's a new id, then fetch the full match history for it and tweet it up. 
-//	
-
 
 exports.ResultsServer = function() {
 
@@ -65,6 +55,12 @@ exports.ResultsServer.prototype = {
 		} catch (e) {
 			this.leagues = {};
 		}
+
+		// auto-discard any super rapid tweets
+		// this will cull some of the potential horror of auto tweeting
+		// every result in the list. Might also catch legit multiple games
+		// ending in rapid succession; i'm not sure yet.
+		this.tweet = _.throttle(this._tweet, 500);
 	},
 
 	start: function() {
@@ -89,8 +85,9 @@ exports.ResultsServer.prototype = {
 
 				var now = new Date().getTime();
 
-				// if it's been more than hour, stop checking.
+				// if it's been more than ten minutes, stop checking.
 				if((now - lastSeen) > (1000*60*10)) {
+					winston.info("Discarding " + league + " from tracking; been too long since we've seen it.");
 					delete this.activeLeagueIds[league];
 				}
 			}, this));
@@ -99,44 +96,62 @@ exports.ResultsServer.prototype = {
 			// just ended its league might not be in the current list
 			// anymore.
 
-			winston.info("Checking leagueIds: " + JSON.stringify(Object.keys(this.activeLeagueIds)));
+			// winston.info("Checking leagueIds: " + JSON.stringify(Object.keys(this.activeLeagueIds)));
 
-			// delay this check to give steam time to get the match up. Sometimes
-			// we check too quickly and we miss a new game because it's not in
-			// the match history yet.
-			setTimeout(_.bind(function() {
-				_.each(Object.keys(this.activeLeagueIds), _.bind(function(leagueId) {
-					this.getMostRecentLeagueMatch(leagueId, _.bind(function(match) {
-						this.logRecentMatch(match, this.leagues[leagueId], false);
-					}, this));
+			var matchCounts = {};
+			_.each(Object.keys(this.activeLeagueIds), _.bind(function(leagueId) {
+				var league = this.leagues[leagueId];
+
+				if(_.isUndefined(league.mostRecentMatchId)) {
+					winston.info("Found un-initialized league: " + league.name);		
+					league.init = true;
+				}
+
+				this.getRecentLeagueMatches(leagueId, _.bind(function(matches) {
+					// winston.info("Found " + matches.length + " matches for league: " + this.leagues[leagueId].name);
+
+					matchCounts[leagueId] = matches.length;
+					this.leagues[leagueId].init = false;
+
+					// ugly but I'm too lazy to work out the flow control here.
+					if(Object.keys(matchCounts).length==Object.keys(this.activeLeagueIds).length) {
+						var out = "";
+
+						_.each(Object.keys(matchCounts), function(k) {
+							out += k + ":" + matchCounts[k] + "\t";
+						});
+
+						winston.info(this.liveGames.length + " -> " + out);
+					}
 				}, this));
+			}, this));
+			this.saveLeagues();
 
-				this.saveLeagues();
-			}, this), 20000);
 		}, this));
 
 		// when we get an update to the league listings (rare, but it happens) 
 		// run a full update against all the leagues. but only if it's a 
 		// startup run. 
-		this.on("leagues:update", _.bind(function() {
-			// when leagues update, first do a pass to get
-			// their most recent match ids.
-			_.each(Object.keys(this.leagues), _.bind(function(leagueId) {
-				var league = this.leagues[leagueId];
+		// this.on("leagues:update", _.bind(function() {
+		// 	// when leagues update, first do a pass to get
+		// 	// their most recent match ids.
+		// 	_.every(Object.keys(this.leagues), _.bind(function(leagueId) {
+		// 		var league = this.leagues[leagueId];
+		// 		winston.info("Processing league: " + league.name);
+		// 		this.getRecentLeagueMatches(leagueId, _.bind(function(matches) {
+		// 			// log the matches, but supress tweets, since this is
+		// 			// only running on startup.
+		// 			_.each(matches, _.bind(function(match) {
+		// 				// on first run supress, but subsequent updates to the 
+		// 				// league list shouldn't supress updates in case a game
+		// 				// collides with a league update operation.
+		// 				this.logRecentMatch(match, league, this.starting);
+		// 			}, this));
+		// 		}, this));
+		// 	}, this));
+		// }, this));
 
-				this.getMostRecentLeagueMatch(leagueId, _.bind(function(match) {
-					// log the matches, but supress tweets, since this is
-					// only running on startup.
-					this.logRecentMatch(match, league, this.starting);
-
-					// on first run supress, but subsequent updates to the 
-					// league list shouldn't supress updates in case a game
-					// collides with a league update operation.
-				}, this));
-			}, this));
-		}, this));
-
-		if(this.leagues.length==0) {
+		if(Object.keys(this.leagues).length==0) {
 			this.updateLeagueListing();
 		}
 
@@ -148,16 +163,8 @@ exports.ResultsServer.prototype = {
 			var now = new Date().getTime();
 			if(now - this.lastLeagueUpdate > (24*60*60*1000)) {
 				this.updateLeagueListing();
-			}
-
-			
+			}		
 		}, this), 60*1000);
-
-		// give it two minutes to startup
-		setTimeout(_.bind(function() {
-			winston.info("Unsetting starting; tweets will now send.");
-			this.starting = false;
-		}, this), 120*1000);
 	},
 
 	stop: function() {
@@ -170,32 +177,24 @@ exports.ResultsServer.prototype = {
 		winston.info("DESTROY ResultsServer");
 	},
 
-	logRecentMatch: function(match,league, suppressProcessing) {
+	logRecentMatch: function(match,league) {
 		// first, check it against the league listing.
-		if(league.mostRecentMatchId==match.match_id) {
-			winston.debug("Match_id matches most recent id for league.")
+		if(league.mostRecentMatchId>=match.match_id) {
+			// winston.info("Match_id (" + match.match_id + ") is lower than last logged: " + league.mostRecentMatchId);
 			return;
 		} else {
+			winston.info("Found new more recent match_id: " + match.match_id);
 			league.mostRecentMatchId = match.match_id;
 
-			winston.info("Found new match for league " + league.name);
-			if(suppressProcessing) {
-				return;
+			// if we're still in init mode, don't tweet.
+			if(!league.init) {
+				this.processFinishedMatch(match.match_id);
 			}
-
-			// otherwise, tweet the game.
-			this.processFinishedMatch(match.match_id);
 		}
 	},
 
-	checkRecentLeagueGames: function() {
-		_.each(this.leagues, _.bind(function(league) {
-			winston.info("loading league " + league.name);
-			this.getLeagueMatches(league.leagueid);
-		}, this));
-	},
-
 	updateLeagueListing: function() {
+		winston.info("Updating league listing.");
 		this.api().getLeagueListing(_.bind(function(err, res) {
 			if(err) {
 				winston.error("Error loading league listing: " + err);
@@ -205,6 +204,11 @@ exports.ResultsServer.prototype = {
 			var that = this;
 			this.leagues = {};
 			_.each(res.leagues, function(league) {
+				if(league.leagueid in that.leagues) {
+					var mostRecentMatchId = that.leagues[league.leagueid].mostRecentMatchId;
+					league.mostRecentMatchId = mostRecentMatchId;
+				}
+
 				that.leagues[league.leagueid] = league;
 			});
 
@@ -222,6 +226,7 @@ exports.ResultsServer.prototype = {
 	},
 
 	checkForLiveLeagueGames: function() {
+		// winston.info("Checking for live games.");
 		this.api().getLiveLeagueGames(_.bind(function(err, res) {
 			if(err) {
 				winston.error("Error loading live league games: " + err);
@@ -237,7 +242,7 @@ exports.ResultsServer.prototype = {
 			this.liveGames = res.games;
 			this.lastLiveGamesUpdate = new Date().getTime();
 
-			winston.info("Found " + this.liveGames.length + " active league games.");
+			// winston.info("Found " + this.liveGames.length + " active league games.");
 
 			this.emit("live-games:update");
 		}, this));
@@ -251,13 +256,11 @@ exports.ResultsServer.prototype = {
 		return _.uniq(leagueIds);
 	},
 
-	getMostRecentLeagueMatch: function(leagueId, cb) {
+	getRecentLeagueMatches: function(leagueId, cb) {
 		var league = this.leagues[leagueId];
 
-		winston.debug("Getting most recent match for " + league.name);
-
+		winston.debug("Getting most recent matches for " + league.name);
 		this.api().getMatchHistory({
-			matches_requested: 1,
 			league_id: leagueId
 		}, _.bind(function(err, res) {
 			if(err) {
@@ -269,19 +272,22 @@ exports.ResultsServer.prototype = {
 				winston.warn("No matches returned for league_id: " + league.name);
 				return;
 			} else {
-				winston.debug(res.total_results + " matches found for " + league.name);
+				// winston.info(res.matches.length + " matches found for " + league.name);
 			}
-
-			// there should only be 1 match, since we only requested 1.
-			var match = res.matches[0];
-			winston.debug("\t" + match.match_id + "/" + match.match_seq_num + " @" + new Date(match.start_time*1000).toISOString());
 			
+			_.each(res.matches, _.bind(function(match) {
+				this.logRecentMatch(match, this.leagues[leagueId]);
+			}, this));
+
+			this.leagues[leagueId].init = false;
+
 			// run the callback if present.
-			cb && cb(match);
+			cb && cb(res.matches);
 		}, this));
 	},
 
 	processFinishedMatch: function(matchId) {
+		winston.info("Loading match to tweet: " + matchId);
 		this.api().getMatchDetails(matchId, _.bind(function(err, match) {
 			if(err) {
 				winston.error("error loading match: " + err);
@@ -330,14 +336,18 @@ exports.ResultsServer.prototype = {
 			}
 
 			winston.info("TWEET: " + tweetString);
-			this.twitter.post('statuses/update', { status: tweetString }, function(err, reply) {
+			this.tweet(tweetString);
+		}, this));
+	},
+
+	_tweet: function(string) {
+		this.twitter.post('statuses/update', { status: tweetString }, function(err, reply) {
 				if (err) {
 	  				winston.error("Error posting tweet: " + err);
 				} else {
 	  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
 				}
-  			});
-		}, this));
+  		});
 	},
 
 	api: function() {
