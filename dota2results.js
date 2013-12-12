@@ -19,10 +19,9 @@ winston.info("dota2results STARTING");
 //			If it is, refresh it.
 //		b. Hit the live league games list. Not to farm match_ids (which aren't shown there)
 //			but to get a list of which leagues to check.
-//				- if we don't have a mostRecentMatchId for this league, suppress tweets for this
-//				  processing pass.
+//				- if we don't have a list of already-seen matchIds, then start one.
 //		c. Compare the list of most recent games for each of the live leagues to
-//			the list of last games we've seen for that league.
+//			the list of last games we've seen for that league. 
 //		d. If it's a new id, then fetch the full match history for it and tweet it up. 
 
 exports.ResultsServer = function() {
@@ -107,8 +106,9 @@ exports.ResultsServer.prototype = {
 			_.each(Object.keys(this.activeLeagueIds), _.bind(function(leagueId) {
 				var league = this.leagues[leagueId];
 
-				if(_.isUndefined(league.mostRecentMatchId)) {
+				if(_.isUndefined(league.lastSeenMatchIds)) {
 					winston.info("Found un-initialized league: " + league.name);		
+					league.lastSeenMatchIds = [];
 					league.init = true;
 				}
 
@@ -116,14 +116,6 @@ exports.ResultsServer.prototype = {
 					// winston.info("Found " + matches.length + " matches for league: " + this.leagues[leagueId].name);
 
 					matchCounts[leagueId] = matches.length;
-
-					// if mostRecentMatchId is still undefined at this point, set it to 0.
-					// thus any subsequent game will trigger a tweet. It would be unset
-					// because no games have been recorded for that league yet.
-					if(_.isUndefined(league.mostRecentMatchId)) {
-						winston.info("Found no games for " + league.name + "; setting mostRecentMatchId to 0.");		
-						league.mostRecentMatchId = 0;
-					}
 
 					this.leagues[leagueId].init = false;
 
@@ -176,12 +168,12 @@ exports.ResultsServer.prototype = {
 
 	logRecentMatch: function(match,league) {
 		// first, check it against the league listing.
-		if(league.mostRecentMatchId>=match.match_id) {
+		if(_.contains(league.lastSeenMatchIds, match.match_id)) {
 			// winston.info("Match_id (" + match.match_id + ") is lower than last logged: " + league.mostRecentMatchId);
 			return;
 		} else {
-			winston.info("Found new more recent match_id: " + match.match_id);
-			league.mostRecentMatchId = match.match_id;
+			winston.info("Found new match_id: " + match.match_id);
+			league.lastSeenMatchIds.push(match.match_id);
 
 			// if we're still in init mode, don't tweet.
 			if(!league.init) {
@@ -224,8 +216,8 @@ exports.ResultsServer.prototype = {
 			this.leagues = {};
 			_.each(res.leagues, function(league) {
 				if(league.leagueid in that.leagues) {
-					var mostRecentMatchId = that.leagues[league.leagueid].mostRecentMatchId;
-					league.mostRecentMatchId = mostRecentMatchId;
+					var lastSeenMatchIds = that.leagues[league.leagueid].lastSeenMatchIds;
+					league.lastSeenMatchIds = lastSeenMatchIds;
 				}
 
 				that.leagues[league.leagueid] = league;
@@ -355,7 +347,7 @@ exports.ResultsServer.prototype = {
 
 			winston.info("Processing match between " + teams[0].name + " and " + teams[1].name);
 
-			var tweetString = teams[0].name + " " + teams[0].kills + " > "+ teams[1].kills + " " + teams[1].name + " (" + durationString + ") in " + league.name;
+			var tweetString = teams[0].name + " " + teams[0].kills + " >" + durationString + "> " + teams[1].kills + " " + teams[1].name + " (" +league.name+ ")";
 
 			if(_.isUndefined(teams[0].name) || _.isUndefined(teams[1].name)) {
 				winston.warn("Found team with undefined name. Probably a pickup league, ignoring. Tweet would have been: " + tweetString);
