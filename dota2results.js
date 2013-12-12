@@ -143,28 +143,6 @@ exports.ResultsServer.prototype = {
 
 		}, this));
 
-		// when we get an update to the league listings (rare, but it happens) 
-		// run a full update against all the leagues. but only if it's a 
-		// startup run. 
-		// this.on("leagues:update", _.bind(function() {
-		// 	// when leagues update, first do a pass to get
-		// 	// their most recent match ids.
-		// 	_.every(Object.keys(this.leagues), _.bind(function(leagueId) {
-		// 		var league = this.leagues[leagueId];
-		// 		winston.info("Processing league: " + league.name);
-		// 		this.getRecentLeagueMatches(leagueId, _.bind(function(matches) {
-		// 			// log the matches, but supress tweets, since this is
-		// 			// only running on startup.
-		// 			_.each(matches, _.bind(function(match) {
-		// 				// on first run supress, but subsequent updates to the 
-		// 				// league list shouldn't supress updates in case a game
-		// 				// collides with a league update operation.
-		// 				this.logRecentMatch(match, league, this.starting);
-		// 			}, this));
-		// 		}, this));
-		// 	}, this));
-		// }, this));
-
 		if(Object.keys(this.leagues).length==0) {
 			this.updateLeagueListing();
 		}
@@ -347,7 +325,16 @@ exports.ResultsServer.prototype = {
 				});
 				team["side"] = name;
 
+				team.kills = 0;
+
 				teams.push(team);
+			});
+
+			_.each(match.players, function(player) {
+				var index = 0;
+				if(player.player_slot >= 128) index = 1;
+
+				teams[index].kills += player.kills;
 			});
 
 			if(!match.radiant_win) {
@@ -368,7 +355,7 @@ exports.ResultsServer.prototype = {
 
 			winston.info("Processing match between " + teams[0].name + " and " + teams[1].name);
 
-			var tweetString = teams[0].name + " DEFEATS " + teams[1].name + " (" + durationString + ") in " + league.name;
+			var tweetString = teams[0].name + " " + teams[0].kills + " > "+ teams[1].kills + " " + teams[1].name + " (" + durationString + ") in " + league.name;
 
 			if(_.isUndefined(teams[0].name) || _.isUndefined(teams[1].name)) {
 				winston.warn("Found team with undefined name. Probably a pickup league, ignoring. Tweet would have been: " + tweetString);
