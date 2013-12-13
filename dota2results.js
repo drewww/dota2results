@@ -153,7 +153,7 @@ exports.ResultsServer.prototype = {
 				this.updateLeagueListing();
 				this.updateTeamListing();
 			}
-		}, this), 60*1000);
+		}, this), 60*1000*2);
 	},
 
 	stop: function() {
@@ -347,7 +347,9 @@ exports.ResultsServer.prototype = {
 
 			winston.info("Processing match between " + teams[0].name + " and " + teams[1].name);
 
-			var tweetString = teams[0].name + " " + teams[0].kills + " >" + durationString + "> " + teams[1].kills + " " + teams[1].name + " (" +league.name+ ")";
+			var time = " \u231A" + durationString;
+
+			var tweetString = "\u265A " + teams[0].name + " " + teams[0].kills + "-" + teams[1].kills + " " + teams[1].name + time + " /" +league.name+ "";
 
 			if(_.isUndefined(teams[0].name) || _.isUndefined(teams[1].name)) {
 				winston.warn("Found team with undefined name. Probably a pickup league, ignoring. Tweet would have been: " + tweetString);
