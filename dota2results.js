@@ -335,7 +335,7 @@ exports.ResultsServer.prototype = {
 				teams[0] = winner;
 			}
 
-			var durationString = " " + Math.floor(match.duration/60) + "h";
+			var durationString = " " + Math.floor(match.duration/60) + "m";
 
 			if(match.duration%60<10) {
 				durationString += "0" + match.duration%60;
