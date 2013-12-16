@@ -349,7 +349,7 @@ exports.ResultsServer.prototype = {
 
 			winston.info("Processing match between " + teams[0].name + " and " + teams[1].name);
 
-			var tweetString =  teams[0].name + " " + teams[0].kills + " \u2014 " + teams[1].kills + " " + teams[1].name + durationString + " in " +league.name;
+			var tweetString =  teams[0].name + " " + teams[0].kills + "\u2014" + teams[1].kills + " " + teams[1].name + durationString + " in " +league.name;
 
 			if(_.isUndefined(teams[0].name) || _.isUndefined(teams[1].name)) {
 				winston.warn("Found team with undefined name. Probably a pickup league, ignoring. Tweet would have been: " + tweetString);
