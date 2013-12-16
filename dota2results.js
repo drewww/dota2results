@@ -335,7 +335,7 @@ exports.ResultsServer.prototype = {
 				teams[0] = winner;
 			}
 
-			var durationString = Math.floor(match.duration/60) + ":";
+			var durationString = " " + Math.floor(match.duration/60) + "h";
 
 			if(match.duration%60<10) {
 				durationString += "0" + match.duration%60;
@@ -343,13 +343,13 @@ exports.ResultsServer.prototype = {
 				durationString += match.duration%60;
 			}
 
+			durationString += "s";
+
 			var league = this.leagues[match.leagueid];
 
 			winston.info("Processing match between " + teams[0].name + " and " + teams[1].name);
 
-			var time = " \u231A" + durationString;
-
-			var tweetString = "\u265A " + teams[0].name + " " + teams[0].kills + "-" + teams[1].kills + " " + teams[1].name + time + " /" +league.name+ "";
+			var tweetString =  teams[0].name + " " + teams[0].kills + " \u2014 " + teams[1].kills + " " + teams[1].name + durationString + " in " +league.name;
 
 			if(_.isUndefined(teams[0].name) || _.isUndefined(teams[1].name)) {
 				winston.warn("Found team with undefined name. Probably a pickup league, ignoring. Tweet would have been: " + tweetString);
