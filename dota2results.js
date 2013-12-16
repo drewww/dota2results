@@ -356,6 +356,10 @@ exports.ResultsServer.prototype = {
 				return;
 			}
 
+			if((teams[0].kills + teams[1].kills)==0 && match.duration <= 6) {
+				winston.info("Discarding match with 0 kills and 6 minute duration.");
+				return;
+			}
 
 			if(tweetString.length > 140) {
 				tweetString = tweetString.substring(0, 139);
