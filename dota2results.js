@@ -153,7 +153,7 @@ exports.ResultsServer.prototype = {
 				this.updateLeagueListing();
 				this.updateTeamListing();
 			}
-		}, this), 60*1000*2);
+		}, this), 60*1000);
 	},
 
 	stop: function() {
