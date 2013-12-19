@@ -347,10 +347,12 @@ exports.ResultsServer.prototype = {
 				teams[1].winner = false;
 
 				teams[0].displayName = "[" + teams[0].name + "]";
+				teams[1].displayName = teams[1].name;
 			} else {
 				teams[0].winner = false;
 				teams[1].winner = true;
 
+				teams[0].displayName = teams[0].name;
 				teams[1].displayName = "[" + teams[1].name + "]";
 			}
 
