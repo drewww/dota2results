@@ -329,10 +329,29 @@ exports.ResultsServer.prototype = {
 				teams[index].kills += player.kills;
 			});
 
-			if(!match.radiant_win) {
-				var winner = teams[1];
-				teams[1] = teams[0];
-				teams[0] = winner;
+			// stop flipping them; radiant always first, dire always second.
+			// if(!match.radiant_win) {
+			// 	var winner = teams[1];
+			// 	teams[1] = teams[0];
+			// 	teams[0] = winner;
+			// }
+
+
+			if(_.isUndefined(teams[0].name) || _.isUndefined(teams[1].name)) {
+				winston.warn("Found team with undefined name. Probably a pickup league, ignoring.");
+				return;
+			}
+
+			if(match.radiant_win) {
+				teams[0].winner = true;
+				teams[1].winner = false;
+
+				teams[0].displayName = "[" + teams[0].name + "]";
+			} else {
+				teams[0].winner = false;
+				teams[1].winner = true;
+
+				teams[1].displayName = "[" + teams[1].name + "]";
 			}
 
 			var durationString = " " + Math.floor(match.duration/60) + "m";
@@ -349,12 +368,7 @@ exports.ResultsServer.prototype = {
 
 			winston.info("Processing match between " + teams[0].name + " and " + teams[1].name);
 
-			var tweetString =  teams[0].name + " " + teams[0].kills + "\u2014" + teams[1].kills + " " + teams[1].name + durationString + " in " +league.name;
-
-			if(_.isUndefined(teams[0].name) || _.isUndefined(teams[1].name)) {
-				winston.warn("Found team with undefined name. Probably a pickup league, ignoring. Tweet would have been: " + tweetString);
-				return;
-			}
+			var tweetString =  teams[0].displayName + " " + teams[0].kills + "\u2014" + teams[1].kills + " " + teams[1].displayName + "\n" + durationString + " // " +league.name;
 
 			winston.info("match duration: " + match.duration);
 			if((teams[0].kills + teams[1].kills)==0 && match.duration <= 360) {
