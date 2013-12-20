@@ -67,6 +67,7 @@ exports.ResultsServer.prototype = {
 		// every result in the list. Might also catch legit multiple games
 		// ending in rapid succession; i'm not sure yet.
 		this.tweet = _.throttle(this._tweet, 500);
+		this.altTweet = _.throttle(this._altTweet, 500);
 
 		this.blacklistedLeagueIds = JSON.parse(process.env.BLACKLISTED_LEAGUE_IDS);
 	},
@@ -79,6 +80,13 @@ exports.ResultsServer.prototype = {
 		  , consumer_secret:      process.env.TWITTER_CONSUMER_SECRET
 		  , access_token:         process.env.TWITTER_ACCESS_TOKEN
 		  , access_token_secret:  process.env.TWITTER_ACCESS_TOKEN_SECRET
+		});
+
+		this.twitterAlt = new twit({
+		    consumer_key:         process.env.TWITTER_ALT_CONSUMER_KEY
+		  , consumer_secret:      process.env.TWITTER_ALT_CONSUMER_SECRET
+		  , access_token:         process.env.TWITTER_ALT_ACCESS_TOKEN
+		  , access_token_secret:  process.env.TWITTER_ALT_ACCESS_TOKEN_SECRET
 		});
 
 		this.on("live-games:update", _.bind(function() {
@@ -384,10 +392,22 @@ exports.ResultsServer.prototype = {
 				winston.info("TWEET: " + tweetString);
 				this.tweet(tweetString);
 			} else {
-				winston.debug("NOT TWEETING: " + tweetString);
+				winston.info("TWEET.ALT: " + tweetString);
+				this.altTweet(tweetString);
 			}
-
 		}, this));
+	},
+
+	// should really abstract this properly but I'm lazy right now and
+	// don't want to deal with the throttle function and arguments.
+	_altTweet: function(string) {
+		this.twitterAlt.post('statuses/update', { status: string }, function(err, reply) {
+				if (err) {
+	  				winston.error("Error posting tweet: " + err);
+				} else {
+	  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
+				}
+  		});
 	},
 
 	_tweet: function(string) {
