@@ -44,6 +44,8 @@ exports.ResultsServer.prototype = {
 
 	activeLeagueIds: null,
 
+	blacklistedLeagueIds: null,
+
 	init: function() {
 		winston.info("INIT ResultsServer");
 
@@ -65,6 +67,8 @@ exports.ResultsServer.prototype = {
 		// every result in the list. Might also catch legit multiple games
 		// ending in rapid succession; i'm not sure yet.
 		this.tweet = _.throttle(this._tweet, 500);
+
+		this.blacklistedLeagueIds = JSON.parse(process.env.BLACKLISTED_LEAGUE_IDS);
 	},
 
 	start: function() {
@@ -260,9 +264,16 @@ exports.ResultsServer.prototype = {
 	},
 
 	getLeaguesWithLiveGames: function() {
-		var leagueIds = _.map(this.liveGames, function(game) {
-			return game.league_id;
-		});
+		var leagueIds = _.map(this.liveGames, _.bind(function(game) {
+			if(!_.contains(this.blacklistedLeagueIds, game.league_id)) {
+				return game.league_id;
+			} else {
+				winston.debug("Discarding blacklisted league: " + this.leagues[game.league_id].name);
+				return null;
+			}
+		}, this));
+
+		leagueIds = _.filter(leagueIds, function(id) { return !_.isNull(id)});
 
 		return _.uniq(leagueIds);
 	},
