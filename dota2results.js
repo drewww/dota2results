@@ -265,15 +265,9 @@ exports.ResultsServer.prototype = {
 
 	getLeaguesWithLiveGames: function() {
 		var leagueIds = _.map(this.liveGames, _.bind(function(game) {
-			if(!_.contains(this.blacklistedLeagueIds, game.league_id)) {
-				return game.league_id;
-			} else {
-				winston.debug("Discarding blacklisted league: " + this.leagues[game.league_id].name);
-				return null;
-			}
+			return game.league_id;
 		}, this));
 
-		leagueIds = _.filter(leagueIds, function(id) { return !_.isNull(id)});
 
 		return _.uniq(leagueIds);
 	},
@@ -340,14 +334,6 @@ exports.ResultsServer.prototype = {
 				teams[index].kills += player.kills;
 			});
 
-			// stop flipping them; radiant always first, dire always second.
-			// if(!match.radiant_win) {
-			// 	var winner = teams[1];
-			// 	teams[1] = teams[0];
-			// 	teams[0] = winner;
-			// }
-
-
 			if(_.isUndefined(teams[0].name) || _.isUndefined(teams[1].name)) {
 				winston.warn("Found team with undefined name. Probably a pickup league, ignoring.");
 				return;
@@ -379,11 +365,10 @@ exports.ResultsServer.prototype = {
 
 			var league = this.leagues[match.leagueid];
 
-			winston.info("Processing match between " + teams[0].name + " and " + teams[1].name);
+			// winston.info("Processing match between " + teams[0].name + " and " + teams[1].name);
 
 			var tweetString =  teams[0].displayName + " " + teams[0].kills + "\u2014" + teams[1].kills + " " + teams[1].displayName + "\n" + durationString + " // " +league.name;
 
-			winston.info("match duration: " + match.duration);
 			if((teams[0].kills + teams[1].kills)==0 && match.duration <= 360) {
 				winston.info("Discarding match with 0 kills and 6 minute duration.");
 				return;
@@ -393,8 +378,15 @@ exports.ResultsServer.prototype = {
 				tweetString = tweetString.substring(0, 139);
 			}
 
-			winston.info("TWEET: " + tweetString);
-			this.tweet(tweetString);
+			var isBlacklisted = _.contains(this.blacklistedLeagueIds, match.leagueid);
+
+			if(!isBlacklisted) {
+				winston.info("TWEET: " + tweetString);
+				this.tweet(tweetString);
+			} else {
+				winston.debug("NOT TWEETING: " + tweetString);
+			}
+
 		}, this));
 	},
 
