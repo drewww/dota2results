@@ -375,7 +375,7 @@ exports.ResultsServer.prototype = {
 
 			// winston.info("Processing match between " + teams[0].name + " and " + teams[1].name);
 
-			var tweetString =  teams[0].displayName + " " + teams[0].kills + "\u2014" + teams[1].kills + " " + teams[1].displayName + "\n" + durationString + " // " +league.name;
+			var tweetString =  teams[0].displayName + " " + teams[0].kills + "\u2014" + teams[1].kills + " " + teams[1].displayName + "\n" + durationString + " // " +league.name + "   \n" + "http://dotabuff.com/matches/" + matchId;
 
 			if((teams[0].kills + teams[1].kills)==0 && match.duration <= 360) {
 				winston.info("Discarding match with 0 kills and 6 minute duration.");
