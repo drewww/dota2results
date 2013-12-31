@@ -46,7 +46,9 @@ exports.ResultsServer.prototype = {
 
 	blacklistedLeagueIds: null,
 
-	init: function() {
+	isDemo: false,
+
+	init: function(isDemo) {
 		winston.info("INIT ResultsServer");
 
 		// maps leagueIds to times we last saw that league
@@ -70,6 +72,8 @@ exports.ResultsServer.prototype = {
 		this.altTweet = _.throttle(this._altTweet, 500);
 
 		this.blacklistedLeagueIds = JSON.parse(process.env.BLACKLISTED_LEAGUE_IDS);
+
+		this.isDemo = isDemo;
 	},
 
 	start: function() {
@@ -144,7 +148,6 @@ exports.ResultsServer.prototype = {
 				}, this));
 			}, this));
 			this.saveLeagues();
-
 		}, this));
 
 		if(Object.keys(this.leagues).length==0) {
@@ -155,17 +158,41 @@ exports.ResultsServer.prototype = {
 			this.updateTeamListing();
 		}
 
-		// now kick off a periodic live games update.
-		this.updater = setInterval(_.bind(function() {
-			this.checkForLiveLeagueGames();
+		var duration = 60*1000;
+		if(this.isDemo) {
+			// we want to pick a random league that's not blacklisted
+			// and tweet from it occasionally.
+			var legalLeagueIds = _.filter(Object.keys(this.leagues), _.bind(function(id) {
+				return !_.contains(this.blacklistedLeagueIds, id);
+			}, this));
 
-			// once a day, do a full leaguelisting update
-			var now = new Date().getTime();
-			if(now - this.lastLeagueUpdate > (24*60*60*1000)) {
-				this.updateLeagueListing();
-				this.updateTeamListing();
-			}
-		}, this), 60*1000);
+			winston.info(JSON.stringify(legalLeagueIds));
+
+			this.updater = setInterval(_.bind(function() {
+				var rand = Math.floor(Math.random()*legalLeagueIds.length);
+
+				var leagueId = legalLeagueIds[rand];
+
+				winston.info("Demoing: " + leagueId);
+
+				this.leagues[leagueId].demo = true;
+				this.leagues[leagueId].lastSeenMatchIds = [];
+
+				this.getRecentLeagueMatches(leagueId);
+			}, this), 5000);
+		} else {
+			// now kick off a periodic live games update.
+			this.updater = setInterval(_.bind(function() {
+				this.checkForLiveLeagueGames();
+
+				// once a day, do a full leaguelisting update
+				var now = new Date().getTime();
+				if(now - this.lastLeagueUpdate > (24*60*60*1000)) {
+					this.updateLeagueListing();
+					this.updateTeamListing();
+				}
+			}, this), duration);
+		}
 	},
 
 	stop: function() {
@@ -190,6 +217,9 @@ exports.ResultsServer.prototype = {
 			// if we're still in init mode, don't tweet.
 			if(!league.init) {
 				this.processFinishedMatch(match.match_id);
+			} else if(league.demo) {
+				// tweet the first thing we encounter just to test, then bail.
+				this.processFinishedMatch(match.match_id);
 			}
 		}
 	},
@@ -211,6 +241,8 @@ exports.ResultsServer.prototype = {
 
 				this.teams[team.team_id] = team;
 			}, this));
+
+			this.saveTeams();
 
 			winston.info("Loaded " + Object.keys(this.teams).length + " teams.");
 		}, this));
@@ -246,6 +278,10 @@ exports.ResultsServer.prototype = {
 
 	saveLeagues: function() {
 		fs.writeFile("/tmp/leagues.json", JSON.stringify(this.leagues));
+	},
+
+	saveTeams: function() {
+		fs.writeFile("/tmp/teams.json", JSON.stringify(this.teams));
 	},
 
 	checkForLiveLeagueGames: function() {
@@ -286,6 +322,10 @@ exports.ResultsServer.prototype = {
 		// only look for games in the last few days
 		var date_min = (new Date().getTime()) - 60*60*24*1*1000;
 
+		if(this.isDemo) {
+			date_min = (new Date().getTime()) - 60*60*24*365*1000;
+		}
+
 		winston.debug("Getting most recent matches for " + league.name);
 		this.api().getMatchHistory({
 			league_id: leagueId,
@@ -303,6 +343,10 @@ exports.ResultsServer.prototype = {
 				// winston.info(res.matches.length + " matches found for " + league.name);
 			}
 			
+			if(this.isDemo) {
+				res.matches = _.first(res.matches, 2);
+			}
+
 			_.each(res.matches, _.bind(function(match) {
 				this.logRecentMatch(match, this.leagues[leagueId]);
 			}, this));
@@ -401,7 +445,7 @@ exports.ResultsServer.prototype = {
 	// should really abstract this properly but I'm lazy right now and
 	// don't want to deal with the throttle function and arguments.
 	_altTweet: function(string) {
-		if(isDemo) return;
+		if(this.isDemo) return;
 
 		this.twitterAlt.post('statuses/update', { status: string }, function(err, reply) {
 				if (err) {
@@ -413,7 +457,7 @@ exports.ResultsServer.prototype = {
 	},
 
 	_tweet: function(string) {
-		if(isDemo) return;
+		if(this.isDemo) return;
 
 		this.twitter.post('statuses/update', { status: string }, function(err, reply) {
 				if (err) {
@@ -444,7 +488,7 @@ var isDemo = process.argv[2]=="demo";
 
 winston.info("demo: " + isDemo);
 
-server.init();
+server.init(isDemo);
 server.start();
 
 
