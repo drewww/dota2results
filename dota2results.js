@@ -401,6 +401,8 @@ exports.ResultsServer.prototype = {
 	// should really abstract this properly but I'm lazy right now and
 	// don't want to deal with the throttle function and arguments.
 	_altTweet: function(string) {
+		if(isDemo) return;
+
 		this.twitterAlt.post('statuses/update', { status: string }, function(err, reply) {
 				if (err) {
 	  				winston.error("Error posting tweet: " + err);
@@ -411,6 +413,8 @@ exports.ResultsServer.prototype = {
 	},
 
 	_tweet: function(string) {
+		if(isDemo) return;
+
 		this.twitter.post('statuses/update', { status: string }, function(err, reply) {
 				if (err) {
 	  				winston.error("Error posting tweet: " + err);
@@ -434,6 +438,11 @@ _.extend(exports.ResultsServer.prototype, EventEmitter.prototype);
 /////////////////////////////////////////////////////
 
 var server = new exports.ResultsServer();
+
+// this is really super duper fragile
+var isDemo = process.argv[2]=="demo";
+
+winston.info("demo: " + isDemo);
 
 server.init();
 server.start();

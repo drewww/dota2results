@@ -10,7 +10,8 @@
     } 
   ],
   "scripts": {
-    "start": "node ./dota2results.js"
+    "start": "node ./dota2results.js",
+    "demo": "node ./dota2results.js demo"
   },
   "repository": {
     "type": "git",
