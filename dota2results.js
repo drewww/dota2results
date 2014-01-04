@@ -454,10 +454,10 @@ exports.ResultsServer.prototype = {
 
 			if(!isBlacklisted) {
 				winston.info("TWEET: " + tweetString);
-				this.tweet(tweetString);
+				this.tweet(tweetString, matchId);
 			} else {
 				winston.info("TWEET.ALT: " + tweetString);
-				this.altTweet(tweetString);
+				this.altTweet(tweetString, matchId);
 			}
 
 			// now remove the match_id from matchIdsToTweet
@@ -468,24 +468,32 @@ exports.ResultsServer.prototype = {
 
 	// should really abstract this properly but I'm lazy right now and
 	// don't want to deal with the throttle function and arguments.
-	_altTweet: function(string) {
+	_altTweet: function(string, matchId) {
 		if(this.isDemo) return;
 
 		this.twitterAlt.post('statuses/update', { status: string }, function(err, reply) {
 				if (err) {
 	  				winston.error("Error posting tweet: " + err);
+
+	  				if(err.indexOf('duplicate')!=-1) {
+						this.matchIdsToTweet = _.without(this.matchIdsToTweet, [matchId]);
+	  				}
 				} else {
 	  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
 				}
   		});
 	},
 
-	_tweet: function(string) {
+	_tweet: function(string, matchId) {
 		if(this.isDemo) return;
 
 		this.twitter.post('statuses/update', { status: string }, function(err, reply) {
 				if (err) {
 	  				winston.error("Error posting tweet: " + err);
+
+	  				if(err.indexOf('duplicate')!=-1) {
+						this.matchIdsToTweet = _.without(this.matchIdsToTweet, [matchId]);
+	  				}
 				} else {
 	  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
 				}
