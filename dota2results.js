@@ -48,6 +48,8 @@ exports.ResultsServer.prototype = {
 
 	isDemo: false,
 
+	matchIdsToTweet: null,
+
 	init: function(isDemo) {
 		winston.info("INIT ResultsServer");
 
@@ -63,6 +65,8 @@ exports.ResultsServer.prototype = {
 		}
 
 		this.teams = {};
+
+		this.matchIdsToTweet = [];
 
 		// auto-discard any super rapid tweets
 		// this will cull some of the potential horror of auto tweeting
@@ -148,6 +152,16 @@ exports.ResultsServer.prototype = {
 				}, this));
 			}, this));
 			this.saveLeagues();
+
+			// now check and see if any matches didn't get successfully processed. If so, 
+			// reprocess them.
+
+			if(this.matchIdsToTweet.length > 0) {
+				winston.info(this.matchIdsToTweet.length + " queued matches that haven't been successfully tweeted, retrying now");
+				_.each(this.matchIdsToTweet, _.bind(function(matchId) {
+					this.processFinishedMatch(matchId);
+				}, this));
+			}
 		}, this));
 
 		if(Object.keys(this.leagues).length==0) {
@@ -214,8 +228,14 @@ exports.ResultsServer.prototype = {
 			winston.info("Found new match_id: " + match.match_id);
 			league.lastSeenMatchIds.push(match.match_id);
 
+
 			// if we're still in init mode, don't tweet.
 			if(!league.init) {
+				// keep track of match ids that we want to tweet, and if they don't
+				// get successfully processed (ie the get match details call fails, which
+				// happens a distressing amount of the time) then try again later.
+				this.matchIdsToTweet.push(match.match_id);
+
 				this.processFinishedMatch(match.match_id);
 			} else if(league.demo) {
 				// tweet the first thing we encounter just to test, then bail.
@@ -439,6 +459,10 @@ exports.ResultsServer.prototype = {
 				winston.info("TWEET.ALT: " + tweetString);
 				this.altTweet(tweetString);
 			}
+
+			// now remove the match_id from matchIdsToTweet
+			this.matchIdsToTweet = _.without(this.matchIdsToTweet, [matchId]);
+			winston.info("Removing match id after successful tweet: " + matchId);
 		}, this));
 	},
 
@@ -447,25 +471,25 @@ exports.ResultsServer.prototype = {
 	_altTweet: function(string) {
 		if(this.isDemo) return;
 
-		this.twitterAlt.post('statuses/update', { status: string }, function(err, reply) {
-				if (err) {
-	  				winston.error("Error posting tweet: " + err);
-				} else {
-	  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
-				}
-  		});
+		// this.twitterAlt.post('statuses/update', { status: string }, function(err, reply) {
+		// 		if (err) {
+	 //  				winston.error("Error posting tweet: " + err);
+		// 		} else {
+	 //  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
+		// 		}
+  // 		});
 	},
 
 	_tweet: function(string) {
 		if(this.isDemo) return;
 
-		this.twitter.post('statuses/update', { status: string }, function(err, reply) {
-				if (err) {
-	  				winston.error("Error posting tweet: " + err);
-				} else {
-	  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
-				}
-  		});
+		// this.twitter.post('statuses/update', { status: string }, function(err, reply) {
+		// 		if (err) {
+	 //  				winston.error("Error posting tweet: " + err);
+		// 		} else {
+	 //  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
+		// 		}
+  // 		});
 	},
 
 	api: function() {
