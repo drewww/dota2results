@@ -471,25 +471,25 @@ exports.ResultsServer.prototype = {
 	_altTweet: function(string) {
 		if(this.isDemo) return;
 
-		// this.twitterAlt.post('statuses/update', { status: string }, function(err, reply) {
-		// 		if (err) {
-	 //  				winston.error("Error posting tweet: " + err);
-		// 		} else {
-	 //  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
-		// 		}
-  // 		});
+		this.twitterAlt.post('statuses/update', { status: string }, function(err, reply) {
+				if (err) {
+	  				winston.error("Error posting tweet: " + err);
+				} else {
+	  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
+				}
+  		});
 	},
 
 	_tweet: function(string) {
 		if(this.isDemo) return;
 
-		// this.twitter.post('statuses/update', { status: string }, function(err, reply) {
-		// 		if (err) {
-	 //  				winston.error("Error posting tweet: " + err);
-		// 		} else {
-	 //  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
-		// 		}
-  // 		});
+		this.twitter.post('statuses/update', { status: string }, function(err, reply) {
+				if (err) {
+	  				winston.error("Error posting tweet: " + err);
+				} else {
+	  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
+				}
+  		});
 	},
 
 	api: function() {
