@@ -46,7 +46,11 @@ exports.ResultsServer.prototype = {
 
 	blacklistedLeagueIds: null,
 
-	init: function() {
+	isDemo: false,
+
+	matchIdsToTweet: null,
+
+	init: function(isDemo) {
 		winston.info("INIT ResultsServer");
 
 		// maps leagueIds to times we last saw that league
@@ -62,6 +66,8 @@ exports.ResultsServer.prototype = {
 
 		this.teams = {};
 
+		this.matchIdsToTweet = [];
+
 		// auto-discard any super rapid tweets
 		// this will cull some of the potential horror of auto tweeting
 		// every result in the list. Might also catch legit multiple games
@@ -70,6 +76,8 @@ exports.ResultsServer.prototype = {
 		this.altTweet = _.throttle(this._altTweet, 500);
 
 		this.blacklistedLeagueIds = JSON.parse(process.env.BLACKLISTED_LEAGUE_IDS);
+
+		this.isDemo = isDemo;
 	},
 
 	start: function() {
@@ -145,6 +153,15 @@ exports.ResultsServer.prototype = {
 			}, this));
 			this.saveLeagues();
 
+			// now check and see if any matches didn't get successfully processed. If so, 
+			// reprocess them.
+
+			if(this.matchIdsToTweet.length > 0) {
+				winston.info(this.matchIdsToTweet.length + " queued matches that haven't been successfully tweeted, retrying now");
+				_.each(this.matchIdsToTweet, _.bind(function(matchId) {
+					this.processFinishedMatch(matchId);
+				}, this));
+			}
 		}, this));
 
 		if(Object.keys(this.leagues).length==0) {
@@ -155,17 +172,41 @@ exports.ResultsServer.prototype = {
 			this.updateTeamListing();
 		}
 
-		// now kick off a periodic live games update.
-		this.updater = setInterval(_.bind(function() {
-			this.checkForLiveLeagueGames();
+		var duration = 60*1000;
+		if(this.isDemo) {
+			// we want to pick a random league that's not blacklisted
+			// and tweet from it occasionally.
+			var legalLeagueIds = _.filter(Object.keys(this.leagues), _.bind(function(id) {
+				return !_.contains(this.blacklistedLeagueIds, id);
+			}, this));
 
-			// once a day, do a full leaguelisting update
-			var now = new Date().getTime();
-			if(now - this.lastLeagueUpdate > (24*60*60*1000)) {
-				this.updateLeagueListing();
-				this.updateTeamListing();
-			}
-		}, this), 60*1000);
+			winston.info(JSON.stringify(legalLeagueIds));
+
+			this.updater = setInterval(_.bind(function() {
+				var rand = Math.floor(Math.random()*legalLeagueIds.length);
+
+				var leagueId = legalLeagueIds[rand];
+
+				winston.info("Demoing: " + leagueId);
+
+				this.leagues[leagueId].demo = true;
+				this.leagues[leagueId].lastSeenMatchIds = [];
+
+				this.getRecentLeagueMatches(leagueId);
+			}, this), 5000);
+		} else {
+			// now kick off a periodic live games update.
+			this.updater = setInterval(_.bind(function() {
+				this.checkForLiveLeagueGames();
+
+				// once a day, do a full leaguelisting update
+				var now = new Date().getTime();
+				if(now - this.lastLeagueUpdate > (24*60*60*1000)) {
+					this.updateLeagueListing();
+					this.updateTeamListing();
+				}
+			}, this), duration);
+		}
 	},
 
 	stop: function() {
@@ -187,8 +228,17 @@ exports.ResultsServer.prototype = {
 			winston.info("Found new match_id: " + match.match_id);
 			league.lastSeenMatchIds.push(match.match_id);
 
+
 			// if we're still in init mode, don't tweet.
 			if(!league.init) {
+				// keep track of match ids that we want to tweet, and if they don't
+				// get successfully processed (ie the get match details call fails, which
+				// happens a distressing amount of the time) then try again later.
+				this.matchIdsToTweet.push(match.match_id);
+
+				this.processFinishedMatch(match.match_id);
+			} else if(league.demo) {
+				// tweet the first thing we encounter just to test, then bail.
 				this.processFinishedMatch(match.match_id);
 			}
 		}
@@ -211,6 +261,8 @@ exports.ResultsServer.prototype = {
 
 				this.teams[team.team_id] = team;
 			}, this));
+
+			this.saveTeams();
 
 			winston.info("Loaded " + Object.keys(this.teams).length + " teams.");
 		}, this));
@@ -246,6 +298,10 @@ exports.ResultsServer.prototype = {
 
 	saveLeagues: function() {
 		fs.writeFile("/tmp/leagues.json", JSON.stringify(this.leagues));
+	},
+
+	saveTeams: function() {
+		fs.writeFile("/tmp/teams.json", JSON.stringify(this.teams));
 	},
 
 	checkForLiveLeagueGames: function() {
@@ -286,6 +342,10 @@ exports.ResultsServer.prototype = {
 		// only look for games in the last few days
 		var date_min = (new Date().getTime()) - 60*60*24*1*1000;
 
+		if(this.isDemo) {
+			date_min = (new Date().getTime()) - 60*60*24*365*1000;
+		}
+
 		winston.debug("Getting most recent matches for " + league.name);
 		this.api().getMatchHistory({
 			league_id: leagueId,
@@ -303,6 +363,10 @@ exports.ResultsServer.prototype = {
 				// winston.info(res.matches.length + " matches found for " + league.name);
 			}
 			
+			if(this.isDemo) {
+				res.matches = _.first(res.matches, 2);
+			}
+
 			_.each(res.matches, _.bind(function(match) {
 				this.logRecentMatch(match, this.leagues[leagueId]);
 			}, this));
@@ -395,29 +459,37 @@ exports.ResultsServer.prototype = {
 				winston.info("TWEET.ALT: " + tweetString);
 				this.altTweet(tweetString);
 			}
+
+			// now remove the match_id from matchIdsToTweet
+			this.matchIdsToTweet = _.without(this.matchIdsToTweet, [matchId]);
+			winston.info("Removing match id after successful tweet: " + matchId);
 		}, this));
 	},
 
 	// should really abstract this properly but I'm lazy right now and
 	// don't want to deal with the throttle function and arguments.
 	_altTweet: function(string) {
-		this.twitterAlt.post('statuses/update', { status: string }, function(err, reply) {
-				if (err) {
-	  				winston.error("Error posting tweet: " + err);
-				} else {
-	  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
-				}
-  		});
+		if(this.isDemo) return;
+
+		// this.twitterAlt.post('statuses/update', { status: string }, function(err, reply) {
+		// 		if (err) {
+	 //  				winston.error("Error posting tweet: " + err);
+		// 		} else {
+	 //  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
+		// 		}
+  // 		});
 	},
 
 	_tweet: function(string) {
-		this.twitter.post('statuses/update', { status: string }, function(err, reply) {
-				if (err) {
-	  				winston.error("Error posting tweet: " + err);
-				} else {
-	  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
-				}
-  		});
+		if(this.isDemo) return;
+
+		// this.twitter.post('statuses/update', { status: string }, function(err, reply) {
+		// 		if (err) {
+	 //  				winston.error("Error posting tweet: " + err);
+		// 		} else {
+	 //  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
+		// 		}
+  // 		});
 	},
 
 	api: function() {
@@ -435,7 +507,12 @@ _.extend(exports.ResultsServer.prototype, EventEmitter.prototype);
 
 var server = new exports.ResultsServer();
 
-server.init();
+// this is really super duper fragile
+var isDemo = process.argv[2]=="demo";
+
+winston.info("demo: " + isDemo);
+
+server.init(isDemo);
 server.start();
 
 
