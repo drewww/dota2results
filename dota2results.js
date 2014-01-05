@@ -475,7 +475,8 @@ exports.ResultsServer.prototype = {
 				if (err) {
 	  				winston.error("Error posting tweet: " + err);
 
-	  				if(err.message.indexOf('duplicate')!=-1) {
+	  				if(err.message.indexOf('duplicate')!=-1 || err.message.indexOf('update limit')!=-1) {
+	  					winston.info("Error posting, duplicate or over limit - drop.");
 						this.matchIdsToTweet = _.without(this.matchIdsToTweet, [matchId]);
 	  				}
 				} else {
@@ -491,7 +492,8 @@ exports.ResultsServer.prototype = {
 				if (err) {
 	  				winston.error("Error posting tweet: " + err);
 
-	  				if(err.message.indexOf('duplicate')!=-1) {
+	  				if(err.message.indexOf('duplicate')!=-1 || err.message.indexOf('update limit')!=-1) {
+	  					winston.info("Error posting, duplicate or over limit - drop.");
 						this.matchIdsToTweet = _.without(this.matchIdsToTweet, [matchId]);
 	  				}
 				} else {
