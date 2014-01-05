@@ -408,6 +408,7 @@ exports.ResultsServer.prototype = {
 
 			if(_.isUndefined(teams[0].name) || _.isUndefined(teams[1].name)) {
 				winston.warn("Found team with undefined name. Probably a pickup league, ignoring.");
+				this.matchIdsToTweet = _.without(this.matchIdsToTweet, [matchId]);
 				return;
 			}
 
