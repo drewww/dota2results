@@ -410,7 +410,7 @@ exports.ResultsServer.prototype = {
 
 			if(_.isUndefined(teams[0].name) || _.isUndefined(teams[1].name)) {
 				winston.warn("Found team with undefined name. Probably a pickup league, ignoring.");
-				removeMatchIdFromQueue(matchId);
+				this.removeMatchIdFromQueue(matchId);
 				return;
 			}
 
@@ -446,7 +446,7 @@ exports.ResultsServer.prototype = {
 
 			if((teams[0].kills + teams[1].kills)==0 && match.duration <= 360) {
 				winston.info("Discarding match with 0 kills and 6 minute duration.");
-				removeMatchIdFromQueue(matchId);
+				this.removeMatchIdFromQueue(matchId);
 				return;
 			}
 
@@ -466,7 +466,7 @@ exports.ResultsServer.prototype = {
 
 			// now remove the match_id from matchIdsToTweet
 			winston.info("Removing match id after successful tweet: " + matchId);
-			removeMatchIdFromQueue(matchId);
+			this.removeMatchIdFromQueue(matchId);
 		}, this));
 	},
 
@@ -481,7 +481,7 @@ exports.ResultsServer.prototype = {
 
 	  				if(err.message.indexOf('duplicate')!=-1 || err.message.indexOf('update limit')!=-1) {
 	  					winston.info("Error posting, duplicate or over limit - drop.");
-	  					removeMatchIdFromQueue(matchId);
+	  					this.removeMatchIdFromQueue(matchId);
 	  				}
 				} else {
 	  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
@@ -498,7 +498,7 @@ exports.ResultsServer.prototype = {
 
 	  				if(err.message.indexOf('duplicate')!=-1 || err.message.indexOf('update limit')!=-1) {
 	  					winston.info("Error posting, duplicate or over limit - drop.");
-	  					removeMatchIdFromQueue(matchId);
+	  					this.removeMatchIdFromQueue(matchId);
 	  				}
 				} else {
 	  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
@@ -506,7 +506,7 @@ exports.ResultsServer.prototype = {
   		});
 	},
 
-	removeMatchIdFromQueue: function(matchId) {
+	this.removeMatchIdFromQueue: function(matchId) {
 		var index = this.matchIdsToTweet.indexOf(matchId);
 
 		if(index > -1) {
