@@ -506,7 +506,7 @@ exports.ResultsServer.prototype = {
   		});
 	},
 
-	this.removeMatchIdFromQueue: function(matchId) {
+	removeMatchIdFromQueue: function(matchId) {
 		var index = this.matchIdsToTweet.indexOf(matchId);
 
 		if(index > -1) {
