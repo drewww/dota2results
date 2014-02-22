@@ -38,6 +38,8 @@ exports.ResultsServer.prototype = {
 	liveGames: null,
 	lastLiveGamesUpdate: null,
 
+	activeSeriesIds: null,
+
 	starting: true,
 
 	updater: null,
@@ -67,6 +69,21 @@ exports.ResultsServer.prototype = {
 		this.teams = {};
 
 		this.matchIdsToTweet = [];
+
+		// activeSeriesIds tracks the win/loss patterns in currently-active
+		// series (ie bo3, bo5, etc)
+		// individual games don't return this information, but the match_history
+		// listings tell us whether a match is part of a series and how long
+		// that series should be. If we see a series_id that's new, we'll
+		// add it here (key=>series_id) and whenever we see a win/loss for that
+		// series_id we'll update it. We'll identify teams within the record with
+		// another {} with the keys as team_ids and the values as wins.
+		//
+		// we'll clean these out when we've seen enough wins (ie 2 for a bo3, 3 for a bo5)
+		// OR when we haven't updated the entry for three days. This should only
+		// really happen if we start this mid-series for anything. But it's important to 
+		// avoid a memory leak.
+		this.activeSeriesIds = {};
 
 		// auto-discard any super rapid tweets
 		// this will cull some of the potential horror of auto tweeting
