@@ -50,7 +50,7 @@ exports.ResultsServer.prototype = {
 
 	isDemo: false,
 
-	matchIdsToTweet: null,
+	matchesToTweet: null,
 
 	init: function(isDemo, isSilent) {
 		winston.info("INIT ResultsServer");
@@ -68,7 +68,7 @@ exports.ResultsServer.prototype = {
 
 		this.teams = {};
 
-		this.matchIdsToTweet = [];
+		this.matchesToTweet = [];
 
 		// activeSeriesIds tracks the win/loss patterns in currently-active
 		// series (ie bo3, bo5, etc)
@@ -174,10 +174,10 @@ exports.ResultsServer.prototype = {
 			// now check and see if any matches didn't get successfully processed. If so, 
 			// reprocess them.
 
-			if(this.matchIdsToTweet.length > 0) {
-				winston.info(this.matchIdsToTweet.length + " queued matches that haven't been successfully tweeted, retrying now: " + JSON.stringify(this.matchIdsToTweet));
-				_.each(this.matchIdsToTweet, _.bind(function(matchId) {
-					this.processFinishedMatch(matchId);
+			if(this.matchesToTweet.length > 0) {
+				winston.info(this.matchesToTweet.length + " queued matches that haven't been successfully tweeted, retrying now: " + JSON.stringify(this.matchIdsToTweet));
+				_.each(this.matchesToTweet, _.bind(function(match) {
+					this.processFinishedMatch(match);
 				}, this));
 			}
 		}, this));
@@ -252,12 +252,12 @@ exports.ResultsServer.prototype = {
 				// keep track of match ids that we want to tweet, and if they don't
 				// get successfully processed (ie the get match details call fails, which
 				// happens a distressing amount of the time) then try again later.
-				this.matchIdsToTweet.push(match.match_id);
+				this.matchesToTweet.push(match);
 
-				this.processFinishedMatch(match.match_id);
+				this.processFinishedMatch(match);
 			} else if(league.demo) {
 				// tweet the first thing we encounter just to test, then bail.
-				this.processFinishedMatch(match.match_id);
+				this.processFinishedMatch(match);
 			}
 		}
 	},
@@ -399,8 +399,8 @@ exports.ResultsServer.prototype = {
 		}, this));
 	},
 
-	processFinishedMatch: function(matchId) {
-		winston.info("Loading match to tweet: " + matchId);
+	processFinishedMatch: function(matchMetadata) {
+		winston.info("Loading match to tweet: " + matchMetadata.match_id);
 		this.api().getMatchDetails(matchId, _.bind(function(err, match) {
 			if(err) {
 				winston.error("error loading match: " + err);
