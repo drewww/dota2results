@@ -340,8 +340,11 @@ exports.ResultsServer.prototype = {
 	getRecentLeagueMatches: function(leagueId, cb) {
 		var league = this.leagues[leagueId];
 
-		// only look for games in the last few days
-		var date_min = (new Date().getTime()) - 60*60*24*1*1000;
+		// only look for games in the last 7 days
+		// (widening this window since if there aren't games in that
+		//  period sometimes we miss the first game for a tournament in 
+		//	that window.)
+		var date_min = (new Date().getTime()) - 60*60*24*7*1000;
 
 		if(this.isDemo) {
 			date_min = (new Date().getTime()) - 60*60*24*365*1000;
