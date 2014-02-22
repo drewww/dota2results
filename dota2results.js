@@ -455,6 +455,53 @@ exports.ResultsServer.prototype = {
 				teams[1].displayName = "[" + teams[1].name + "]";
 			}
 
+			// now, lets update the series_id information.
+			// first, check and see if this series has been seen before.
+			
+			if(matchMetadata.series_type > 0) {
+				logger.info(JSON.stringify(this.activeSeriesIds));
+
+				var seriesStatus;
+				if(matchMetadata.series_id in this.activeSeriesIds) {
+					seriesStatus = this.activeSeriesIds[matchMetadata.series_id]
+				} else {
+					seriesStatus = {
+						series_id: matchMetadata.series_id,
+						series_type: matchMetadata.series_type,
+						teams: {},
+						time: new Time().getTime()
+					}
+
+					seriesStatus.teams[teams[0]["team_id"]] = 0;
+					seriesStatus.teams[teams[1]["team_id"]] = 0;
+				}
+
+				// now update the results based on who won
+				var teamId = teams[0]["team_id"];
+				
+				if(team[1].winner) {
+					teamId = teams[1]["team_id"];
+				}
+
+				seriesStatus.teams[teamId] = seriesStatus.teams[teamId]+1;
+				seriesStatus.time = new Time().getTime();
+
+				// move the information into the teams objects for convenience
+				teams[0].series_wins = seriesStatus.teams[teams[0]["team_id"]]
+				teams[1].series_wins = seriesStatus.teams[teams[1]["team_id"]]
+				logger.info("Series win info: " + teams[0].series_wins + " - " + teams[1].series_wins);
+			} else {
+				teams[0].series_wins = null;
+				teams[1].series_wins = null;
+				logger.info("No series data available.");
+			}
+
+
+			// update the listing.
+			this.activeSeriesIds[seriesStatus.series_id] = seriesStatus;
+
+			// now push the series status into 
+
 			var durationString = " " + Math.floor(match.duration/60) + "m";
 
 			if(match.duration%60<10) {
@@ -467,9 +514,18 @@ exports.ResultsServer.prototype = {
 
 			var league = this.leagues[match.leagueid];
 
-			// winston.info("Processing match between " + teams[0].name + " and " + teams[1].name);
+			var seriesString;
+			if (_.isNull(teams[0].series_wins) && _.isNull(teams[1].series_wins)) {
+				seriesString = "";
+			} else {
+				// add series info
+				seriesString = teams[0].series_wins + "\u2014" + teams[1].series_wins + "\n";
+			}
 
-			var tweetString =  teams[0].displayName + " " + teams[0].kills + "\u2014" + teams[1].kills + " " + teams[1].displayName + "\n" + durationString + " // " +league.name + "   \n" + "http://dotabuff.com/matches/" + matchId;
+			var tweetString = teams[0].displayName + " " + teams[0].kills + "\u2014" + teams[1].kills + " " + teams[1].displayName + "\n";
+			tweetString = tweetString + seriesString + "\n";
+			tweetString = tweetString + durationString + " // " +league.name + "   \n";
+			tweetString = tweetString + "http://dotabuff.com/matches/" + matchId;
 
 			if((teams[0].kills + teams[1].kills)==0 && match.duration <= 360) {
 				winston.info("Discarding match with 0 kills and 6 minute duration.");
@@ -494,7 +550,40 @@ exports.ResultsServer.prototype = {
 			// now remove the match_id from matchIdsToTweet
 			winston.info("Removing match id after successful tweet: " + matchId);
 			this.removeMatchIdFromQueue(matchId);
+			this.cleanupActiveSeries();
 		}, this));
+	},
+
+	cleanupActiveSeries: function() {
+		logger.info("Cleaning active series. Total: " + Object.keys(this.activeSeriesIds).length);
+		// run through all active series. 
+		var idsToRemove = [];
+		var now = new Time().getTime();
+		_.each(this.activeSeriesIds, function(id, series) {
+			if((now - series.time) > 60*60*24*3*1000) {
+				idsToRemove.push(series.series_id);
+				logger.info("Removing series_id due to age: " + series.series_id);
+			}
+
+			var maxGames = 0;
+			_.each(series.teams, function(team_id, wins) {
+				maxGames = Math.max(maxGames, wins);
+			});
+
+			// series_type is 1 for a bo3, 2 for a bo5, (3 for a bo7?)
+			// so just do that number +1 because that's the number of matches
+			// it would take to win.
+			if(maxGames==series.series_type+1) {
+				idsToRemove.push(series.series_id);
+				logger.info("Removing series_id due to max games hit" + series.series_id);
+			}
+		});
+
+		_.each(idsToRemove, function(id) {
+			delete this.activeSeriesIds[id];
+		});
+
+		logger.info("After cleaning, total: " + Object.keys(this.activeSeriesIds).length);
 	},
 
 	// should really abstract this properly but I'm lazy right now and
