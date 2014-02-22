@@ -437,7 +437,7 @@ exports.ResultsServer.prototype = {
 
 			if(_.isUndefined(teams[0].name) || _.isUndefined(teams[1].name)) {
 				winston.warn("Found team with undefined name. Probably a pickup league, ignoring.");
-				this.removeMatchFromQueue(matchId);
+				this.removeMatchFromQueue(match);
 				return;
 			}
 
@@ -486,6 +486,42 @@ exports.ResultsServer.prototype = {
 				seriesStatus.teams[teamId] = seriesStatus.teams[teamId]+1;
 				seriesStatus.time = new Date().getTime();
 
+				// construct a string where it has filled in circles for every
+				// win, and empty circles to fill into the total number of games
+				// necessary.
+
+				_.each([0, 1], function(index) {
+					winston.info("final processing and formatting for index: " + index);
+					winston.info("for teams: " + JSON.stringify(teams[index]));
+					teams[index].series_wins = seriesStatus.teams[teams[index]["team_id"]]
+
+					var winString = "";					
+					for(var x=0; x<teams[index].series_wins; x++) {
+						winString = winString + "\u25CF";
+					}
+
+					// at this point we have as many dots as this team has wins.
+					// now, fill up the remainder.
+					var gamesToWin = seriesStatus.series_type+1;
+					var emptyDots = gamesToWin - teams[index].series_wins;
+
+					// flip the direction the empty dots are on, so wins are always
+					// closest to the team name.
+					if(index==0) {
+						for (var o=0; o<emptyDots; o++) {
+							winString = "\u25CC" + winString;
+						}
+					} else {
+						for (var o=0; o<emptyDots; o++) {
+							winString = winString + "\u25CC";
+						}
+					}
+
+					winston.info("Setting win_string: " + winString);
+					// store it for later.
+					teams[index].wins_string = winString;
+				});
+
 				// move the information into the teams objects for convenience
 				teams[0].series_wins = seriesStatus.teams[teams[0]["team_id"]]
 				teams[1].series_wins = seriesStatus.teams[teams[1]["team_id"]]
@@ -493,6 +529,8 @@ exports.ResultsServer.prototype = {
 			} else {
 				teams[0].series_wins = null;
 				teams[1].series_wins = null;
+				teams[0].wins_string = "";
+				teams[1].wins_string = "";
 				winston.info("No series data available.");
 			}
 
@@ -510,16 +548,7 @@ exports.ResultsServer.prototype = {
 
 			var league = this.leagues[match.leagueid];
 
-			var seriesString;
-			if (_.isNull(teams[0].series_wins) && _.isNull(teams[1].series_wins)) {
-				seriesString = "";
-			} else {
-				// add series info
-				seriesString = teams[0].series_wins + "\u2014" + teams[1].series_wins + "\n";
-			}
-
-			var tweetString = teams[0].displayName + " " + teams[0].kills + "\u2014" + teams[1].kills + " " + teams[1].displayName + "\n";
-			tweetString = tweetString + seriesString;
+			var tweetString = teams[0].wins_string + " " + teams[0].displayName + " " + teams[0].kills + "\u2014" + teams[1].kills + " " + teams[1].displayName + " " + teams[1].wins_string + "\n";
 			tweetString = tweetString + durationString + " // " +league.name + "   \n";
 			tweetString = tweetString + "http://dotabuff.com/matches/" + matchMetadata.match_id;
 
@@ -561,21 +590,25 @@ exports.ResultsServer.prototype = {
 		// run through all active series. 
 		var idsToRemove = [];
 		var now = new Date().getTime();
-		_.each(this.activeSeriesIds, function(id, series) {
+		_.each(this.activeSeriesIds, function(series, id) {
+			winston.info(JSON.stringify(series));
 			if((now - series.time) > 60*60*24*3*1000) {
 				idsToRemove.push(series.series_id);
 				winston.info("Removing series_id due to age: " + series.series_id);
 			}
 
 			var maxGames = 0;
-			_.each(series.teams, function(team_id, wins) {
+			winston.info("team win status: " + JSON.stringify(series.teams))
+			_.each(series.teams, function(wins, team_id) {
 				maxGames = Math.max(maxGames, wins);
 			});
+
+			winston.info("maxGames: " + maxGames);
 
 			// series_type is 1 for a bo3, 2 for a bo5, (3 for a bo7?)
 			// so just do that number +1 because that's the number of matches
 			// it would take to win.
-			if(maxGames==series.series_type+1) {
+			if(maxGames==(series.series_type+1)) {
 				idsToRemove.push(series.series_id);
 				winston.info("Removing series_id due to max games hit" + series.series_id);
 			}
