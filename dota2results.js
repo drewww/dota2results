@@ -401,7 +401,7 @@ exports.ResultsServer.prototype = {
 
 	processFinishedMatch: function(matchMetadata) {
 		winston.info("Loading match to tweet: " + matchMetadata.match_id);
-		this.api().getMatchDetails(matchId, _.bind(function(err, match) {
+		this.api().getMatchDetails(matchMetadata.match_id, _.bind(function(err, match) {
 			if(err) {
 				winston.error("error loading match: " + err);
 				// in this case we DON'T pull it from the queue; we want to retry
@@ -437,7 +437,7 @@ exports.ResultsServer.prototype = {
 
 			if(_.isUndefined(teams[0].name) || _.isUndefined(teams[1].name)) {
 				winston.warn("Found team with undefined name. Probably a pickup league, ignoring.");
-				this.removeMatchIdFromQueue(matchId);
+				this.removeMatchFromQueue(matchId);
 				return;
 			}
 
@@ -459,7 +459,7 @@ exports.ResultsServer.prototype = {
 			// first, check and see if this series has been seen before.
 			
 			if(matchMetadata.series_type > 0) {
-				logger.info(JSON.stringify(this.activeSeriesIds));
+				winston.info(JSON.stringify(this.activeSeriesIds));
 
 				var seriesStatus;
 				if(matchMetadata.series_id in this.activeSeriesIds) {
@@ -469,7 +469,7 @@ exports.ResultsServer.prototype = {
 						series_id: matchMetadata.series_id,
 						series_type: matchMetadata.series_type,
 						teams: {},
-						time: new Time().getTime()
+						time: new Date().getTime()
 					}
 
 					seriesStatus.teams[teams[0]["team_id"]] = 0;
@@ -479,26 +479,22 @@ exports.ResultsServer.prototype = {
 				// now update the results based on who won
 				var teamId = teams[0]["team_id"];
 				
-				if(team[1].winner) {
+				if(teams[1].winner) {
 					teamId = teams[1]["team_id"];
 				}
 
 				seriesStatus.teams[teamId] = seriesStatus.teams[teamId]+1;
-				seriesStatus.time = new Time().getTime();
+				seriesStatus.time = new Date().getTime();
 
 				// move the information into the teams objects for convenience
 				teams[0].series_wins = seriesStatus.teams[teams[0]["team_id"]]
 				teams[1].series_wins = seriesStatus.teams[teams[1]["team_id"]]
-				logger.info("Series win info: " + teams[0].series_wins + " - " + teams[1].series_wins);
+				winston.info("Series win info: " + teams[0].series_wins + " - " + teams[1].series_wins);
 			} else {
 				teams[0].series_wins = null;
 				teams[1].series_wins = null;
-				logger.info("No series data available.");
+				winston.info("No series data available.");
 			}
-
-
-			// update the listing.
-			this.activeSeriesIds[seriesStatus.series_id] = seriesStatus;
 
 			// now push the series status into 
 
@@ -523,13 +519,13 @@ exports.ResultsServer.prototype = {
 			}
 
 			var tweetString = teams[0].displayName + " " + teams[0].kills + "\u2014" + teams[1].kills + " " + teams[1].displayName + "\n";
-			tweetString = tweetString + seriesString + "\n";
+			tweetString = tweetString + seriesString;
 			tweetString = tweetString + durationString + " // " +league.name + "   \n";
-			tweetString = tweetString + "http://dotabuff.com/matches/" + matchId;
+			tweetString = tweetString + "http://dotabuff.com/matches/" + matchMetadata.match_id;
 
-			if((teams[0].kills + teams[1].kills)==0 && match.duration <= 360) {
+			if((teams[0].kills + teams[1].kills)==0 || match.duration <= 410) {
 				winston.info("Discarding match with 0 kills and 6 minute duration.");
-				this.removeMatchIdFromQueue(matchId);
+				this.removeMatchFromQueue(match);
 				return;
 			}
 
@@ -541,28 +537,34 @@ exports.ResultsServer.prototype = {
 
 			if(!isBlacklisted) {
 				winston.info("TWEET: " + tweetString);
-				this.tweet(tweetString, matchId);
+				this.tweet(tweetString, matchMetadata);
 			} else {
 				winston.info("TWEET.ALT: " + tweetString);
-				this.altTweet(tweetString, matchId);
+				this.altTweet(tweetString, matchMetadata);
 			}
 
 			// now remove the match_id from matchIdsToTweet
-			winston.info("Removing match id after successful tweet: " + matchId);
-			this.removeMatchIdFromQueue(matchId);
+			winston.info("Removing match id after successful tweet: " + matchMetadata.match_id);
+			this.removeMatchFromQueue(matchMetadata.match_id);
+
+			// update the listing if there were series wins.
+			// do this late in the process in case there were errors.
+			if(!_.isNull(teams[0].series_wins)) {
+				this.activeSeriesIds[seriesStatus.series_id] = seriesStatus;
+			}
 			this.cleanupActiveSeries();
 		}, this));
 	},
 
 	cleanupActiveSeries: function() {
-		logger.info("Cleaning active series. Total: " + Object.keys(this.activeSeriesIds).length);
+		winston.info("Cleaning active series. Total: " + Object.keys(this.activeSeriesIds).length);
 		// run through all active series. 
 		var idsToRemove = [];
-		var now = new Time().getTime();
+		var now = new Date().getTime();
 		_.each(this.activeSeriesIds, function(id, series) {
 			if((now - series.time) > 60*60*24*3*1000) {
 				idsToRemove.push(series.series_id);
-				logger.info("Removing series_id due to age: " + series.series_id);
+				winston.info("Removing series_id due to age: " + series.series_id);
 			}
 
 			var maxGames = 0;
@@ -575,7 +577,7 @@ exports.ResultsServer.prototype = {
 			// it would take to win.
 			if(maxGames==series.series_type+1) {
 				idsToRemove.push(series.series_id);
-				logger.info("Removing series_id due to max games hit" + series.series_id);
+				winston.info("Removing series_id due to max games hit" + series.series_id);
 			}
 		});
 
@@ -583,12 +585,12 @@ exports.ResultsServer.prototype = {
 			delete this.activeSeriesIds[id];
 		});
 
-		logger.info("After cleaning, total: " + Object.keys(this.activeSeriesIds).length);
+		winston.info("After cleaning, total: " + Object.keys(this.activeSeriesIds).length);
 	},
 
 	// should really abstract this properly but I'm lazy right now and
 	// don't want to deal with the throttle function and arguments.
-	_altTweet: function(string, matchId) {
+	_altTweet: function(string, match) {
 		if(this.isDemo) return;
 		if(this.isSilent) return;
 
@@ -598,7 +600,7 @@ exports.ResultsServer.prototype = {
 
 	  				if(err.message.indexOf('duplicate')!=-1 || err.message.indexOf('update limit')!=-1) {
 	  					winston.info("Error posting, duplicate or over limit - drop.");
-	  					this.removeMatchIdFromQueue(matchId);
+	  					this.removeMatchFromQueue(match);
 	  				}
 				} else {
 	  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
@@ -606,7 +608,7 @@ exports.ResultsServer.prototype = {
   		});
 	},
 
-	_tweet: function(string, matchId) {
+	_tweet: function(string, match) {
 		if(this.isDemo) return;
 		if(this.isSilent) return;
 
@@ -616,7 +618,7 @@ exports.ResultsServer.prototype = {
 
 	  				if(err.message.indexOf('duplicate')!=-1 || err.message.indexOf('update limit')!=-1) {
 	  					winston.info("Error posting, duplicate or over limit - drop.");
-	  					this.removeMatchIdFromQueue(matchId);
+	  					this.removeMatchFromQueue(match);
 	  				}
 				} else {
 	  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
@@ -624,12 +626,10 @@ exports.ResultsServer.prototype = {
   		});
 	},
 
-	removeMatchIdFromQueue: function(matchId) {
-		var index = this.matchIdsToTweet.indexOf(matchId);
-
-		if(index > -1) {
-			this.matchIdsToTweet.splice(index, 1);
-		}
+	removeMatchFromQueue: function(match) {
+		this.matchesToTweet = _.reject(this.matchesToTweet, function(match) {
+			return match.match_id==match.match_id;
+		});
 	},
 
 	api: function() {
