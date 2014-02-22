@@ -11,7 +11,8 @@
   ],
   "scripts": {
     "start": "node ./dota2results.js",
-    "demo": "node ./dota2results.js demo"
+    "demo": "node ./dota2results.js demo",
+    "silent": "node ./dota2results.js silent"
   },
   "repository": {
     "type": "git",

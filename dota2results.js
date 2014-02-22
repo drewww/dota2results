@@ -50,7 +50,7 @@ exports.ResultsServer.prototype = {
 
 	matchIdsToTweet: null,
 
-	init: function(isDemo) {
+	init: function(isDemo, isSilent) {
 		winston.info("INIT ResultsServer");
 
 		// maps leagueIds to times we last saw that league
@@ -78,6 +78,7 @@ exports.ResultsServer.prototype = {
 		this.blacklistedLeagueIds = JSON.parse(process.env.BLACKLISTED_LEAGUE_IDS);
 
 		this.isDemo = isDemo;
+		this.isSilent = isSilent;
 	},
 
 	start: function() {
@@ -474,6 +475,7 @@ exports.ResultsServer.prototype = {
 	// don't want to deal with the throttle function and arguments.
 	_altTweet: function(string, matchId) {
 		if(this.isDemo) return;
+		if(this.isSilent) return;
 
 		this.twitterAlt.post('statuses/update', { status: string }, function(err, reply) {
 				if (err) {
@@ -491,6 +493,7 @@ exports.ResultsServer.prototype = {
 
 	_tweet: function(string, matchId) {
 		if(this.isDemo) return;
+		if(this.isSilent) return;
 
 		this.twitter.post('statuses/update', { status: string }, function(err, reply) {
 				if (err) {
@@ -531,10 +534,13 @@ var server = new exports.ResultsServer();
 
 // this is really super duper fragile
 var isDemo = process.argv[2]=="demo";
+var isSilent = process.argv[2]=="silent";
+
 
 winston.info("demo: " + isDemo);
+winston.info("silent: " + isSilent);
 
-server.init(isDemo);
+server.init(isDemo, isSilent);
 server.start();
 
 
