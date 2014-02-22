@@ -402,11 +402,17 @@ exports.ResultsServer.prototype = {
 				teams.push(team);
 			});
 
+			// this is a little unusual; instead of counting kills and crediting the
+			// to the team with the kills, we're changing to count DEATHS of the opposite 
+			// team and attribute that score to the opposite team. This difference matters
+			// in situations with suicides and neutral denies. This matches the behavior
+			// of the in-game scoreboard, even though it's sort of idiosyncratic.
+			// Thanks to @datdota for pointing out this inconsistency.
 			_.each(match.players, function(player) {
-				var index = 0;
-				if(player.player_slot >= 128) index = 1;
+				var index = 1;
+				if(player.player_slot >= 128) index = 0;
 
-				teams[index].kills += player.kills;
+				teams[index].kills += player.deaths;
 			});
 
 			if(_.isUndefined(teams[0].name) || _.isUndefined(teams[1].name)) {
