@@ -610,13 +610,13 @@ exports.ResultsServer.prototype = {
 			// it would take to win.
 			if(maxGames==(series.series_type+1)) {
 				idsToRemove.push(series.series_id);
-				winston.info("Removing series_id due to max games hit" + series.series_id);
+				winston.info("Removing series_id due to max games hit " + series.series_id);
 			}
 		});
 
-		_.each(idsToRemove, function(id) {
+		_.each(idsToRemove, _.bind(function(id) {
 			delete this.activeSeriesIds[id];
-		});
+		}, this));
 
 		winston.info("After cleaning, total: " + Object.keys(this.activeSeriesIds).length);
 	},
