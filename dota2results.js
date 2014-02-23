@@ -605,7 +605,8 @@ client.auth(redisURL.auth.split(":")[1]);
 		var now = new Date().getTime();
 		_.each(this.activeSeriesIds, function(series, id) {
 			winston.info(JSON.stringify(series));
-			if((now - series.time) > 60*60*24*3*1000) {
+			
+			if((now - series.time) > 60*60*12*1000) {
 				idsToRemove.push(series.series_id);
 				winston.info("Removing series_id due to age: " + series.series_id);
 			}
