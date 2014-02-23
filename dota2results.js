@@ -11,6 +11,11 @@ winston.cli();
 winston.info("dota2results STARTING");
 
 
+// var teamTwitterHandles = {
+// 	36: "natusvincere",
+// 	39: "EvilGenuises",
+
+// }
 
 // Here's the overall system flow:
 // 	1. On startup, get a list of leagues. Store it.
