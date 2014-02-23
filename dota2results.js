@@ -258,8 +258,6 @@ client.auth(redisURL.auth.split(":")[1]);
 
 			// if we're still in init mode, don't tweet.
 			if(!league.init) {
-
-				winston.info("Found new match_id: " + match.match_id);
 				// keep track of match ids that we want to tweet, and if they don't
 				// get successfully processed (ie the get match details call fails, which
 				// happens a distressing amount of the time) then try again later.
@@ -604,8 +602,6 @@ client.auth(redisURL.auth.split(":")[1]);
 		var idsToRemove = [];
 		var now = new Date().getTime();
 		_.each(this.activeSeriesIds, function(series, id) {
-			winston.info(JSON.stringify(series));
-			
 			if((now - series.time) > 60*60*12*1000) {
 				idsToRemove.push(series.series_id);
 				winston.info("Removing series_id due to age: " + series.series_id);
@@ -629,7 +625,7 @@ client.auth(redisURL.auth.split(":")[1]);
 			delete this.activeSeriesIds[id];
 		}, this));
 
-		winston.info("After cleaning, total: " + Object.keys(this.activeSeriesIds).length);
+		winston.info("After cleaning, # series being tracked: " + Object.keys(this.activeSeriesIds).length);
 	},
 
 	// should really abstract this properly but I'm lazy right now and
