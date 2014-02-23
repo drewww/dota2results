@@ -254,12 +254,12 @@ client.auth(redisURL.auth.split(":")[1]);
 			// winston.info("Match_id (" + match.match_id + ") is lower than last logged: " + league.mostRecentMatchId);
 			return;
 		} else {
-			winston.info("Found new match_id: " + match.match_id);
 			league.lastSeenMatchIds.push(match.match_id);
-
 
 			// if we're still in init mode, don't tweet.
 			if(!league.init) {
+
+				winston.info("Found new match_id: " + match.match_id);
 				// keep track of match ids that we want to tweet, and if they don't
 				// get successfully processed (ie the get match details call fails, which
 				// happens a distressing amount of the time) then try again later.
@@ -473,7 +473,7 @@ client.auth(redisURL.auth.split(":")[1]);
 			// first, check and see if this series has been seen before.
 			
 			if(matchMetadata.series_type > 0) {
-				winston.info(JSON.stringify(this.activeSeriesIds));
+				winston.debug(JSON.stringify(this.activeSeriesIds));
 
 				var seriesStatus;
 				if(matchMetadata.series_id in this.activeSeriesIds) {
@@ -505,8 +505,6 @@ client.auth(redisURL.auth.split(":")[1]);
 				// necessary.
 
 				_.each([0, 1], function(index) {
-					winston.info("final processing and formatting for index: " + index);
-					winston.info("for teams: " + JSON.stringify(teams[index]));
 					teams[index].series_wins = seriesStatus.teams[teams[index]["team_id"]]
 
 					var winString = "";					
@@ -531,7 +529,6 @@ client.auth(redisURL.auth.split(":")[1]);
 						}
 					}
 
-					winston.info("Setting win_string: " + winString);
 					// store it for later.
 					teams[index].wins_string = winString;
 				});
@@ -539,13 +536,13 @@ client.auth(redisURL.auth.split(":")[1]);
 				// move the information into the teams objects for convenience
 				teams[0].series_wins = seriesStatus.teams[teams[0]["team_id"]]
 				teams[1].series_wins = seriesStatus.teams[teams[1]["team_id"]]
-				winston.info("Series win info: " + teams[0].series_wins + " - " + teams[1].series_wins);
+				winston.debug("Series win info: " + teams[0].series_wins + " - " + teams[1].series_wins);
 			} else {
 				teams[0].series_wins = null;
 				teams[1].series_wins = null;
 				teams[0].wins_string = "";
 				teams[1].wins_string = "";
-				winston.info("No series data available.");
+				winston.debug("No series data available.");
 			}
 
 			// now push the series status into 
@@ -603,7 +600,6 @@ client.auth(redisURL.auth.split(":")[1]);
 	},
 
 	cleanupActiveSeries: function() {
-		winston.info("Cleaning active series. Total: " + Object.keys(this.activeSeriesIds).length);
 		// run through all active series. 
 		var idsToRemove = [];
 		var now = new Date().getTime();
@@ -615,12 +611,9 @@ client.auth(redisURL.auth.split(":")[1]);
 			}
 
 			var maxGames = 0;
-			winston.info("team win status: " + JSON.stringify(series.teams))
 			_.each(series.teams, function(wins, team_id) {
 				maxGames = Math.max(maxGames, wins);
 			});
-
-			winston.info("maxGames: " + maxGames);
 
 			// series_type is 1 for a bo3, 2 for a bo5, (3 for a bo7?)
 			// so just do that number +1 because that's the number of matches
