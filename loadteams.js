@@ -44,8 +44,33 @@ function getTeamsStartingAtId() {
 			allTeams.push(team);
 		});
 
+		writeJSON();
+
 		setTimeout(getTeamsStartingAtId, 1000);
 	});	
+}
+
+function writeJSON() {
+	fs.writeFile('all_teams.json', JSON.stringify(allTeams));
+}
+
+function loadJSON() {
+	json = fs.readFileSync('all_teams.json', {encoding:"utf-8"});
+	allTeams = JSON.parse(json);
+	winston.info("team count: " + allTeams.length);
+
+	_.each(allTeams, function(team) {
+		if(team.team_id > maxTeamId) {
+			maxTeamId = team.team_id;
+		}
+	});
+	winston.info("max team id: " + maxTeamId);
+}
+
+try {
+	loadJSON();
+} catch (e){
+	winston.info("err loading: " + e);
 }
 
 getTeamsStartingAtId();
