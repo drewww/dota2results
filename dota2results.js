@@ -73,8 +73,6 @@ exports.ResultsServer.prototype = {
 			this.leagues = {};
 		}
 
-		this.teams = {};
-
 		this.matchesToTweet = [];
 
 		// activeSeriesIds tracks the win/loss patterns in currently-active
@@ -158,9 +156,6 @@ client.auth(redisURL.auth.split(":")[1]);
 			// always run on the last set not this set, because if a game
 			// just ended its league might not be in the current list
 			// anymore.
-
-			// winston.info("Checking leagueIds: " + JSON.stringify(Object.keys(this.activeLeagueIds)));
-
 			var matchCounts = {};
 			_.each(Object.keys(this.activeLeagueIds), _.bind(function(leagueId) {
 				var league = this.leagues[leagueId];
@@ -207,10 +202,6 @@ client.auth(redisURL.auth.split(":")[1]);
 			this.updateLeagueListing();
 		}
 
-		if(Object.keys(this.teams).length==0) {
-			this.updateTeamListing();
-		}
-
 		var duration = 60*1000;
 		if(this.isDemo) {
 			// we want to pick a random league that's not blacklisted
@@ -242,7 +233,6 @@ client.auth(redisURL.auth.split(":")[1]);
 				var now = new Date().getTime();
 				if(now - this.lastLeagueUpdate > (24*60*60*1000)) {
 					this.updateLeagueListing();
-					this.updateTeamListing();
 				}
 			}, this), duration);
 		}
@@ -283,30 +273,6 @@ client.auth(redisURL.auth.split(":")[1]);
 		}
 	},
 
-	updateTeamListing: function() {
-		winston.info("Updating team listing.");
-
-		this.api().getTeamInfoByTeamID({}, _.bind(function(err, res) {
-			if(err) {
-				winston.error("Error loading team listing: " + err);
-				return;
-			}
-
-			_.each(res.teams, _.bind(function(team) {
-				// skip any team that hasn't appeared in a league game.
-				if(!"league_id_0" in team) {
-					return;
-				}
-
-				this.teams[team.team_id] = team;
-			}, this));
-
-			this.saveTeams();
-
-			winston.info("Loaded " + Object.keys(this.teams).length + " teams.");
-		}, this));
-	},
-
 	updateLeagueListing: function() {
 		winston.info("Updating league listing.");
 		this.api().getLeagueListing(_.bind(function(err, res) {
@@ -337,10 +303,6 @@ client.auth(redisURL.auth.split(":")[1]);
 
 	saveLeagues: function() {
 		fs.writeFile("/tmp/leagues.json", JSON.stringify(this.leagues));
-	},
-
-	saveTeams: function() {
-		fs.writeFile("/tmp/teams.json", JSON.stringify(this.teams));
 	},
 
 	saveSeries: function() {
