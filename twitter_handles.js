@@ -30,4 +30,22 @@
 exports.teams = {
 	36: "natusvincere",
 	39: "EvilGenuises"
+	  // : "cloud9gg",
+	  // : "team_eHug",
+	  // : "OrangeEsports",
+	  // : "TeamLiquidPro",
+	  // : "theAllianceGG",
+	  // : "nextdota",
+	  // : "team_empire",
+	  // : "ZephyrDota",
+	  // : "SigmaDota2",
+	  // : "Fnatic",
+	  // : "DKdota2",
+	  // : "invgaming",
+	  // : "LGDgaming",
+	  // : "vici_gaming",
+	  // : "titansesports",
+	  // : "mineski",
+	  // : "TeamVirtusPro",
+	  // : "RoXKISTeam",
 };
