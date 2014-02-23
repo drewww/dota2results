@@ -21,54 +21,46 @@ function getTeamsStartingAtId() {
 
 		if(err || teams.length==0) {
 			winston.info("FINISHED: " + err + " teams.length=" + teams.length);
-
-			fs.writeFile('all_teams.json', JSON.stringify(allTeams));
-
-			var teamsText = "";
-			_.each(allTeams, function(team) {
-				teamsText = teamsText + team.team_id + "\t\t" + team.tag + "\t\t" + team.name + "\n";
-			});
-
-			fs.writeFile('all_teams.txt', teamsText);
-
 			return;
 		}
 
 		winston.info(maxTeamId + "    found: " + teams.length);
 
+		var teamsString = "";
 		_.each(teams, function(team) {
 			if(team.team_id > maxTeamId) {
 				maxTeamId = team.team_id;
 			}
 
-			allTeams.push(team);
+			teamsString = teamsString + team.team_id + "\t\t" + team.tag + "\t\t" + team.name + "\n";
 		});
 
-		writeJSON();
+		save(teamsString, maxTeamId);
 
-		setTimeout(getTeamsStartingAtId, 1000);
+		setTimeout(getTeamsStartingAtId, 10);
 	});	
 }
 
-function writeJSON() {
-	fs.writeFile('all_teams.json', JSON.stringify(allTeams));
+function save(teamsString, maxTeamId) {
+	fs.appendFile('teams.txt', teamsString);
+	fs.writeFile('max_team_id', maxTeamId);
 }
 
-function loadJSON() {
-	json = fs.readFileSync('all_teams.json', {encoding:"utf-8"});
-	allTeams = JSON.parse(json);
-	winston.info("team count: " + allTeams.length);
+// function loadJSON() {
+// 	json = fs.readFileSync('all_teams.json', {encoding:"utf-8"});
+// 	allTeams = JSON.parse(json);
+// 	winston.info("team count: " + allTeams.length);
 
-	_.each(allTeams, function(team) {
-		if(team.team_id > maxTeamId) {
-			maxTeamId = team.team_id;
-		}
-	});
-	winston.info("max team id: " + maxTeamId);
-}
+// 	_.each(allTeams, function(team) {
+// 		if(team.team_id > maxTeamId) {
+// 			maxTeamId = team.team_id;
+// 		}
+// 	});
+// 	winston.info("max team id: " + maxTeamId);
+// }
 
 try {
-	loadJSON();
+	maxTeamId = parseInt(fs.readFileSync('max_team_id', {encoding: 'utf-8'}));
 } catch (e){
 	winston.info("err loading: " + e);
 }
