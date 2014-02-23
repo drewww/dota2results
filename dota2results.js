@@ -5,17 +5,11 @@ var request = require('request'),
 	dazzle = require('dazzle'),
 	EventEmitter = require('events').EventEmitter,
 	fs = require('fs'),
-	twit = require('twit');
+	twit = require('twit'),
+	team_twitter = require('./twitter_handles.js');
 
 winston.cli();
 winston.info("dota2results STARTING");
-
-
-// var teamTwitterHandles = {
-// 	36: "natusvincere",
-// 	39: "EvilGenuises",
-
-// }
 
 // Here's the overall system flow:
 // 	1. On startup, get a list of leagues. Store it.
@@ -428,6 +422,14 @@ exports.ResultsServer.prototype = {
 				this.removeMatchIdFromQueue(matchId);
 				return;
 			}
+
+			// Check if we have a twitter handle for this team id.
+			_.each(teams, function(team) {
+				if(team.team_id in team_twitter) {
+					winston.info("Replacing " + team.name + " with @" + team_twitter[team.team_id]);
+					team.name = "@" + team_twitter[team.team_id];
+				}
+			});
 
 			if(match.radiant_win) {
 				teams[0].winner = true;
