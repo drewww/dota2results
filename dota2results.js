@@ -7,6 +7,11 @@ var request = require('request'),
 	fs = require('fs'),
 	twit = require('twit');
 
+if("REDISCLOUD_URL" in process.env) {
+	var redis = require('redis'),
+		url = require('url');
+}
+
 winston.cli();
 winston.info("dota2results STARTING");
 
@@ -52,6 +57,8 @@ exports.ResultsServer.prototype = {
 
 	matchesToTweet: null,
 
+	redis: null,
+
 	init: function(isDemo, isSilent) {
 		winston.info("INIT ResultsServer");
 
@@ -96,6 +103,20 @@ exports.ResultsServer.prototype = {
 
 		this.isDemo = isDemo;
 		this.isSilent = isSilent;
+
+		if("REDISCLOUD_URL" in process.env) {
+			var redisURL = url.parse(process.env.REDISCLOUD_URL);
+			this.redis = redis.createClient(redisURL.port, redisURL.hostname, {no_ready_check: true});
+client.auth(redisURL.auth.split(":")[1]);
+
+			this.redis.on("connect", _.bind(function() {
+				winston.info("Connected to redis!");
+				this.loadSeries();
+			}, this));
+		} else {
+			winston.warn("Redis connection information not available.");
+			this.loadSeries();
+		}
 	},
 
 	start: function() {
@@ -320,6 +341,37 @@ exports.ResultsServer.prototype = {
 
 	saveTeams: function() {
 		fs.writeFile("/tmp/teams.json", JSON.stringify(this.teams));
+	},
+
+	saveSeries: function() {
+		if(this.redis) {
+			this.redis.set("global:series", JSON.stringify(this.activeSeriesIds));
+		} else {
+			fs.writeFile("/tmp/series.json", JSON.stringify(this.activeSeriesIds));
+		}
+	},
+
+	loadSeries: function() {
+		if(this.redis) {
+			this.redis.get("global:series", function(err, reply) {
+				if(!err) {
+					this.activeSeriesIds = JSON.parse(reply);
+					winston.info("Loading series from cache: " + JSON.stringify(this.activeSeriesIds));
+				} else {
+					winston.warn("Error loading series from cache: " + err + "; defaulting to empty.");
+					this.activeSeriesIds = {};
+				}
+			});
+		} else {
+			try {
+				this.activeSeriesIds = JSON.parse(fs.readFileSync("/tmp/series.json", {encoding:"utf8"}));
+			} catch (e) {
+				winston.warn("Error loading series from disk, defaulting to empty.");
+				this.activeSeriesIds = {};
+			}
+
+			winston.info("Loaded series from disk: " + JSON.stringify(this.activeSeriesIds));
+		}
 	},
 
 	checkForLiveLeagueGames: function() {
@@ -580,6 +632,9 @@ exports.ResultsServer.prototype = {
 			// do this late in the process in case there were errors.
 			if(!_.isNull(teams[0].series_wins)) {
 				this.activeSeriesIds[seriesStatus.series_id] = seriesStatus;
+
+				// cache the series data so it survives a restart. 
+				this.saveSeries();
 			}
 			this.cleanupActiveSeries();
 		}, this));

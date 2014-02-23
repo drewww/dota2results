@@ -23,7 +23,8 @@
     "winston": "0.7.x",
     "request": "2.x",
     "dazzle": "*",
-    "underscore": "*"
+    "underscore": "*",
+    "redis" : "*"
   },
   "license": "GPL v2",
   "engines": {
