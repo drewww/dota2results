@@ -13,13 +13,13 @@
 // want to make sure your favorite team gets tweeted,
 // here's what you do.
 //
-// 1. Open the all_teams.txt file
+// 1. Open the teams.txt file
 // 2. Search for either the team name or team tag.
 // 3. Look at the number on the left edge of that line, that's the team id.
 // 4. Look up the twitter handle for that team.
 // 5. Click 'edit' in the upper right hand corner.
 // 6. Add a line in this file, following the format:
-//		id, "twitter_handle",
+//		id : "twitter_handle",
 // 7. Click 'Commit Changes'
 //
 // Then I'll review it and deploy it to the server
