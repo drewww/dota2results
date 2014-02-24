@@ -6,7 +6,7 @@ var request = require('request'),
 	EventEmitter = require('events').EventEmitter,
 	fs = require('fs'),
 	twit = require('twit'),
-	team_twitter = require('./twitter_handles.js');
+	team_twitter = require('./twitter_handles.js').teams;
 
 if("REDISCLOUD_URL" in process.env) {
 	var redis = require('redis'),
