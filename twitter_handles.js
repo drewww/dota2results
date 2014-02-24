@@ -43,7 +43,7 @@ exports.teams = {
 	5 : "invgaming",
 	15 : "LGDgaming",
 	  // : "vici_gaming",
-	  // : "titansesports",
+999689 : "titansesports",
 	80 : "mineski",
 	40 : "TeamVirtusPro",
 	293390 : "RoXKISTeam",
