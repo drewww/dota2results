@@ -29,7 +29,7 @@
 exports.teams = {
 	36: "natusvincere",
 	39: "EvilGenuises",
-	1333516 : "cloud9gg",
+	1333179 : "cloud9gg",
 	1252040 : "team_eHug",
 	1075534 : "OrangeEsports",
 	2163 : "TeamLiquidPro",
