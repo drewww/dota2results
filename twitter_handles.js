@@ -26,26 +26,26 @@
 // and then the bot will know that team's twitter
 // handle!
 
-
 exports.teams = {
 	36: "natusvincere",
 	39: "EvilGenuises",
-	  // : "cloud9gg",
-	  // : "team_eHug",
-	 214 : "OrangeEsports",
+	1333516 : "cloud9gg",
+	1252040 : "team_eHug",
+	214 : "OrangeEsports",
 	2163 : "TeamLiquidPro",
-	  // : "theAllianceGG",
-	  // : "nextdota",
-	 46 : "team_empire",
-	  // : "ZephyrDota",
-	  // : "SigmaDota2",
-	  // : "Fnatic",
-	  // : "DKdota2",
-	  // : "invgaming",
-	  15 : "LGDgaming",
+	111474 : "theAllianceGG",
+	1066490 : "nextdota",
+	46 : "team_empire",
+	1245961 : "ZephyrDota",
+	1079149 : "SigmaDota2",
+	350190 : "Fnatic",
+	7 : "DKdota2",
+	5 : "invgaming",
+	15 : "LGDgaming",
 	  // : "vici_gaming",
 	  // : "titansesports",
-	  80 : "mineski",
-	  40 : "TeamVirtusPro",
-	  // : "RoXKISTeam",
+	80 : "mineski",
+	40 : "TeamVirtusPro",
+	293390 : "RoXKISTeam",
+	162 : "FlipSid3Tactics"
 };
