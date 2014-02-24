@@ -104,7 +104,7 @@ exports.ResultsServer.prototype = {
 		if("REDISCLOUD_URL" in process.env) {
 			var redisURL = url.parse(process.env.REDISCLOUD_URL);
 			this.redis = redis.createClient(redisURL.port, redisURL.hostname, {no_ready_check: true});
-client.auth(redisURL.auth.split(":")[1]);
+			this.redis.auth(redisURL.auth.split(":")[1]);
 
 			this.redis.on("connect", _.bind(function() {
 				winston.info("Connected to redis!");
@@ -514,7 +514,7 @@ client.auth(redisURL.auth.split(":")[1]);
 
 					var winString = "";					
 					for(var x=0; x<teams[index].series_wins; x++) {
-						winString = winString + "\u25CF";
+						winString = winString + "\u25C9";
 					}
 
 					// at this point we have as many dots as this team has wins.
@@ -526,11 +526,11 @@ client.auth(redisURL.auth.split(":")[1]);
 					// closest to the team name.
 					if(index==0) {
 						for (var o=0; o<emptyDots; o++) {
-							winString = "\u25CC" + winString;
+							winString = "\u25CE" + winString;
 						}
 					} else {
 						for (var o=0; o<emptyDots; o++) {
-							winString = winString + "\u25CC";
+							winString = winString + "\u25CE";
 						}
 					}
 
