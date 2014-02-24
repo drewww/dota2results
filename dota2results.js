@@ -457,6 +457,8 @@ exports.ResultsServer.prototype = {
 				if(team.team_id in team_twitter) {
 					winston.info("Replacing " + team.name + " with @" + team_twitter[team.team_id]);
 					team.name = "@" + team_twitter[team.team_id];
+				} else {
+					winston.info("No twitter handle found for team: " + team.name + " (" + team.team_id + ")");
 				}
 			});
 
