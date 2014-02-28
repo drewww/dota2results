@@ -1,5 +1,4 @@
 
-
 // This file associates team ids with twitter handles.
 // With this information, we can substitute team names
 // for ther twitter handles which will make it easier
@@ -47,5 +46,6 @@ exports.teams = {
 	80 : "mineski",
 	40 : "TeamVirtusPro",
 	293390 : "RoXKISTeam",
+	55 : "prdota2",
 	162 : "FlipSid3Tactics"
 };
