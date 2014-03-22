@@ -596,7 +596,7 @@ exports.ResultsServer.prototype = {
 			// this is definitely going to push the total over 140, but we count on the fact that
 			// twitter will shorten it automatically for us post-submission. Not 100% sure this is true
 			// but I think it is.
-			tweetString = tweetString + "\n" + "http://dotabuff.com/matches/" + matchMetadata.match_id;
+			tweetString = tweetString + "http://dotabuff.com/matches/" + matchMetadata.match_id;
 
 			var isBlacklisted = _.contains(this.blacklistedLeagueIds, match.leagueid);
 
