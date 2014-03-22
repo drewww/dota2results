@@ -567,9 +567,8 @@ exports.ResultsServer.prototype = {
 			var league = this.leagues[match.leagueid];
 
 			var tweetString = teams[0].wins_string + " " + teams[0].displayName + " " + teams[0].kills + "\u2014" + teams[1].kills + " " + teams[1].displayName + " " + teams[1].wins_string + "\n";
-			tweetString = tweetString + durationString + " // " +league.name + "   \n";
-			tweetString = tweetString + "http://dotabuff.com/matches/" + matchMetadata.match_id;
-
+			tweetString = tweetString + durationString + " / " +league.name + "   \n";
+			
 			if((teams[0].kills + teams[1].kills)==0 || match.duration <= 410) {
 				winston.info("Discarding match with 0 kills and 6 minute duration.");
 				this.removeMatchFromQueue(match);
@@ -581,10 +580,23 @@ exports.ResultsServer.prototype = {
 			if(tweetString[0]=='@') {
 				tweetString = "." + tweetString;
 			}
-			
-			if(tweetString.length > 140) {
-				tweetString = tweetString.substring(0, 139);
+
+			// We know we want to append a dotabuff link, and that it will get auto-shortened
+			// to a string of length 20; (see https://dev.twitter.com/docs/api/1/get/help/configuration - this could increase)
+			// so check and see if the content without the url is over the space we have left
+			// for a \n + a t.co link. If it is, then chop away at the league name
+			// which has started getting super long in some situations.
+			// (119 instead of 120 because of the \n character)
+
+			if(tweetString.length > 119) {
+				tweetString = tweetString.substring(0, 119);
 			}
+
+			// now add the link back in.
+			// this is definitely going to push the total over 140, but we count on the fact that
+			// twitter will shorten it automatically for us post-submission. Not 100% sure this is true
+			// but I think it is.
+			tweetString = tweetString + "\n" + "http://dotabuff.com/matches/" + matchMetadata.match_id;
 
 			var isBlacklisted = _.contains(this.blacklistedLeagueIds, match.leagueid);
 
