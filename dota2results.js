@@ -576,6 +576,12 @@ exports.ResultsServer.prototype = {
 				return;
 			}
 
+			// check if an @ sign is the first character. If it is, then add a preceeding period
+			// so it doesn't count as a reply.
+			if(tweetString[0]=='@') {
+				tweetString = "." + tweetString;
+			}
+			
 			if(tweetString.length > 140) {
 				tweetString = tweetString.substring(0, 139);
 			}
