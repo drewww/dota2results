@@ -516,7 +516,7 @@ exports.ResultsServer.prototype = {
 
 					var winString = "";					
 					for(var x=0; x<teams[index].series_wins; x++) {
-						winString = winString + "\u25C9";
+						winString = winString + "\u25FC";
 					}
 
 					// at this point we have as many dots as this team has wins.
@@ -528,11 +528,11 @@ exports.ResultsServer.prototype = {
 					// closest to the team name.
 					if(index==0) {
 						for (var o=0; o<emptyDots; o++) {
-							winString = "\u25CE" + winString;
+							winString = "\u25FB" + winString;
 						}
 					} else {
 						for (var o=0; o<emptyDots; o++) {
-							winString = winString + "\u25CE";
+							winString = winString + "\u25FB";
 						}
 					}
 
