@@ -577,7 +577,9 @@ exports.ResultsServer.prototype = {
 
 			// check if an @ sign is the first character. If it is, then add a preceeding period
 			// so it doesn't count as a reply.
+			winston.info("tweetString initial character: " + tweetString[0]);
 			if(tweetString[0]=='@') {
+				winston.info("Updating tweetstring with preceeding dot");
 				tweetString = "." + tweetString;
 			}
 
