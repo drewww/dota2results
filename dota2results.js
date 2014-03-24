@@ -577,9 +577,8 @@ exports.ResultsServer.prototype = {
 
 			// check if an @ sign is the first character. If it is, then add a preceeding period
 			// so it doesn't count as a reply.
-			winston.info("tweetString initial character: " + tweetString[0]);
+			tweetString = tweetString.trim();
 			if(tweetString[0]=='@') {
-				winston.info("Updating tweetstring with preceeding dot");
 				tweetString = "." + tweetString;
 			}
 
@@ -598,7 +597,7 @@ exports.ResultsServer.prototype = {
 			// this is definitely going to push the total over 140, but we count on the fact that
 			// twitter will shorten it automatically for us post-submission. Not 100% sure this is true
 			// but I think it is.
-			tweetString = tweetString + "http://dotabuff.com/matches/" + matchMetadata.match_id;
+			tweetString = tweetString + "\nhttp://dotabuff.com/matches/" + matchMetadata.match_id;
 
 			var isBlacklisted = _.contains(this.blacklistedLeagueIds, match.leagueid);
 
