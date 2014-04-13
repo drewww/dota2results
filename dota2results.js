@@ -301,11 +301,12 @@ exports.ResultsServer.prototype = {
 				// info to the matchesToTweet list AND the immediate proccessing of the
 				// tweet.
 				winston.info("Delaying match handling for: " + match.match_id);
+				// push the match info into redis, in case the server restarts before
+				// we process this match.
+				this.saveDelayedMatch(match);
+
 				setTimeout(_.bind(function() {
 					winston.info("\tDone delaying match handling for " + match.match_id);
-					// push the match info into redis, in case the server restarts before
-					// we process this match.
-					this.saveDelayedMatch(match);
 
 					// add the match to the list of matches to tweet
 					this.matchesToTweet.push(match);
@@ -412,7 +413,14 @@ exports.ResultsServer.prototype = {
 
 	saveDelayedMatch: function(match) {
 		if(this.redis) {
-			this.redis.rpush("global:delayed_matches", JSON.stringify(match));
+			this.redis.rpush("global:delayed_matches", JSON.stringify(match),
+				function(err, reply) {
+					if(err) {
+						winston.warn("Error pushing delayed match info: " + err);
+					} else {
+						winston.debug("Reply from pushing deplayed match: " + reply);
+					}
+				});
 		} else {
 			winston.warn("No support for saving delayed matches to disk.");
 		}
@@ -791,7 +799,7 @@ exports.ResultsServer.prototype = {
 		// easily.
 		if(this.redis) {
 			winston.info("Trying to remove " + match.match_id + " from delayed_matches.")
-			this.redis.lrem("global:delayed_matches", JSON.stringify(match),
+			this.redis.lrem("global:delayed_matches", 0, JSON.stringify(match),
 				function(err, reply) {
 					if(err) {
 						winston.warn("\tError removing match: " + err);
