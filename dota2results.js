@@ -44,8 +44,11 @@ winston.info("dota2results STARTING");
 // 2. Process the match, but setTimeout the actual tweet.
 // 3. Server restarts before the tweet goes out.
 // 4. Server reloads, discovers a tweet in the redis queue. Sends it immediately.
-// What am I concerned about here?
-//		a. The second tweet doesn't go out in time 
+//		- this case is a little weird and could cause a tweet go out not as delayed
+//			as it should. But I don't think we can afford to sweat that.
+//		- only way around that would be to add a time component and that's annoying.
+//		- we should think of this whole system as insurance, and it's okay if we
+//			make a small mistake in timing.
 
 exports.ResultsServer = function() {
 
@@ -128,10 +131,12 @@ exports.ResultsServer.prototype = {
 			this.redis.on("connect", _.bind(function() {
 				winston.info("Connected to redis!");
 				this.loadSeries();
+				this.loadDelayedMatchIds();
 			}, this));
 		} else {
 			winston.warn("Redis connection information not available.");
 			this.loadSeries();
+			this.loadDelayedMatchIds();
 		}
 	},
 
@@ -206,7 +211,9 @@ exports.ResultsServer.prototype = {
 			this.saveLeagues();
 
 			// now check and see if any matches didn't get successfully processed. If so,
-			// reprocess them.
+			// reprocess them. (reminder: this happens every live-games:update, not on
+			// server start. This is how we deal with failures; we retry them in this
+			// loop until they succeed and get removed from the list.)
 
 			if(this.matchesToTweet.length > 0) {
 				winston.info(this.matchesToTweet.length + " queued matches that haven't been successfully tweeted, retrying now: " + JSON.stringify(this.matchIdsToTweet));
@@ -349,6 +356,25 @@ exports.ResultsServer.prototype = {
 			}
 
 			winston.info("Loaded series from disk: " + JSON.stringify(this.activeSeriesIds));
+		}
+	},
+
+	loadDelayedMatchIds: function() {
+		if(this.redis) {
+			// get the whole list.
+			// don't delete anything though, only do that on successful tweets.
+			this.redis.lrange("global:delayed_matches",0, -1, _.bind(function(err, reply) {
+				if(!err) {
+					_.each(reply, _.bind(function(match) {
+						// push it onto matchIdsToTweet
+						this.matchesToTweet.push(JSON.parse(match));
+					}, this));
+				} else {
+					winston.warn("Error loading delayed matches from cache: " + err);
+				}
+			}, this));
+		} else {
+			winston.warn("No support for loading delayed match ids from disk.");
 		}
 	},
 
