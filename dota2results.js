@@ -25,8 +25,27 @@ winston.info("dota2results STARTING");
 //			but to get a list of which leagues to check.
 //				- if we don't have a list of already-seen matchIds, then start one.
 //		c. Compare the list of most recent games for each of the live leagues to
-//			the list of last games we've seen for that league. 
-//		d. If it's a new id, then fetch the full match history for it and tweet it up. 
+//			the list of last games we've seen for that league.
+//		d. If it's a new id, then fetch the full match history for it and tweet it up.
+
+// There's a lot of demand for delaying tweets by two minutes. Options for this:
+//	1. Just do a settimeout on the tweets.
+//		The problem with this strategy is that if the server restarts in that 2 min window, tweets are lost.
+//	2. So, when a match finishes, add it to redis (if redis is present) and do a settimeout of the actual tweet. In that settimeout, remove the id from redis.
+//		We're protected from double-tweets by twitter API, so that failure mode is handled.
+//		It's a little annoying to test this without local redis. But I guess I can deal.
+// So the pieces of this are:
+//		1. Delay all outgoing tweets.
+//		2. Make a note of currently-delayed match Ids, put in redis.
+//		3. After delay, tweet + remove matchId from list.
+//				There's a minor failure mode here; if server shuts down between tweet + removal, it will re-tweet it next time the server starts.
+// Wait a second, lets tink about the actual failure mode here:
+// 1. Get the match-finished event.
+// 2. Process the match, but setTimeout the actual tweet.
+// 3. Server restarts before the tweet goes out.
+// 4. Server reloads, discovers a tweet in the redis queue. Sends it immediately.
+// What am I concerned about here?
+//		a. The second tweet doesn't go out in time 
 
 exports.ResultsServer = function() {
 
@@ -85,7 +104,7 @@ exports.ResultsServer.prototype = {
 		//
 		// we'll clean these out when we've seen enough wins (ie 2 for a bo3, 3 for a bo5)
 		// OR when we haven't updated the entry for three days. This should only
-		// really happen if we start this mid-series for anything. But it's important to 
+		// really happen if we start this mid-series for anything. But it's important to
 		// avoid a memory leak.
 		this.activeSeriesIds = {};
 
@@ -160,7 +179,7 @@ exports.ResultsServer.prototype = {
 				var league = this.leagues[leagueId];
 
 				if(_.isUndefined(league.lastSeenMatchIds)) {
-					winston.info("Found un-initialized league: " + league.name);		
+					winston.info("Found un-initialized league: " + league.name);
 					league.lastSeenMatchIds = [];
 					league.init = true;
 				}
@@ -186,7 +205,7 @@ exports.ResultsServer.prototype = {
 			}, this));
 			this.saveLeagues();
 
-			// now check and see if any matches didn't get successfully processed. If so, 
+			// now check and see if any matches didn't get successfully processed. If so,
 			// reprocess them.
 
 			if(this.matchesToTweet.length > 0) {
@@ -370,7 +389,7 @@ exports.ResultsServer.prototype = {
 
 		// only look for games in the last 7 days
 		// (widening this window since if there aren't games in that
-		//  period sometimes we miss the first game for a tournament in 
+		//  period sometimes we miss the first game for a tournament in
 		//	that window.)
 		var date_min = (new Date().getTime()) - 60*60*24*7*1000;
 
@@ -394,7 +413,7 @@ exports.ResultsServer.prototype = {
 			} else {
 				// winston.info(res.matches.length + " matches found for " + league.name);
 			}
-			
+
 			if(this.isDemo) {
 				res.matches = _.first(res.matches, 2);
 			}
@@ -434,7 +453,7 @@ exports.ResultsServer.prototype = {
 			});
 
 			// this is a little unusual; instead of counting kills and crediting the
-			// to the team with the kills, we're changing to count DEATHS of the opposite 
+			// to the team with the kills, we're changing to count DEATHS of the opposite
 			// team and attribute that score to the opposite team. This difference matters
 			// in situations with suicides and neutral denies. This matches the behavior
 			// of the in-game scoreboard, even though it's sort of idiosyncratic.
@@ -478,7 +497,7 @@ exports.ResultsServer.prototype = {
 
 			// now, lets update the series_id information.
 			// first, check and see if this series has been seen before.
-			
+
 			if(matchMetadata.series_type > 0) {
 				winston.debug(JSON.stringify(this.activeSeriesIds));
 
@@ -499,7 +518,7 @@ exports.ResultsServer.prototype = {
 
 				// now update the results based on who won
 				var teamId = teams[0]["team_id"];
-				
+
 				if(teams[1].winner) {
 					teamId = teams[1]["team_id"];
 				}
@@ -514,7 +533,7 @@ exports.ResultsServer.prototype = {
 				_.each([0, 1], function(index) {
 					teams[index].series_wins = seriesStatus.teams[teams[index]["team_id"]]
 
-					var winString = "";					
+					var winString = "";
 					for(var x=0; x<teams[index].series_wins; x++) {
 						winString = winString + "\u25FC";
 					}
@@ -552,7 +571,7 @@ exports.ResultsServer.prototype = {
 				winston.debug("No series data available.");
 			}
 
-			// now push the series status into 
+			// now push the series status into
 
 			var durationString = " " + Math.floor(match.duration/60) + "m";
 
@@ -568,7 +587,7 @@ exports.ResultsServer.prototype = {
 
 			var tweetString = teams[0].wins_string + " " + teams[0].displayName + " " + teams[0].kills + "\u2014" + teams[1].kills + " " + teams[1].displayName + " " + teams[1].wins_string + "\n";
 			tweetString = tweetString + durationString + " / " +league.name + "   \n";
-			
+
 			if((teams[0].kills + teams[1].kills)==0 || match.duration <= 410) {
 				winston.info("Discarding match with 0 kills and 6 minute duration.");
 				this.removeMatchFromQueue(match);
@@ -618,7 +637,7 @@ exports.ResultsServer.prototype = {
 			if(!_.isNull(teams[0].series_wins)) {
 				this.activeSeriesIds[seriesStatus.series_id] = seriesStatus;
 
-				// cache the series data so it survives a restart. 
+				// cache the series data so it survives a restart.
 				this.saveSeries();
 			}
 			this.cleanupActiveSeries();
@@ -626,7 +645,7 @@ exports.ResultsServer.prototype = {
 	},
 
 	cleanupActiveSeries: function() {
-		// run through all active series. 
+		// run through all active series.
 		var idsToRemove = [];
 		var now = new Date().getTime();
 		_.each(this.activeSeriesIds, function(series, id) {
@@ -730,5 +749,3 @@ server.start();
 process.on('uncaughtException', function(err) {
   winston.error(err.stack);
 });
-
-
