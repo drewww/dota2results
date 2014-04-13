@@ -125,8 +125,14 @@ exports.ResultsServer.prototype = {
 
 		if("REDISCLOUD_URL" in process.env) {
 			var redisURL = url.parse(process.env.REDISCLOUD_URL);
+
 			this.redis = redis.createClient(redisURL.port, redisURL.hostname, {no_ready_check: true});
-			this.redis.auth(redisURL.auth.split(":")[1]);
+
+			// If it seems like the URL isn't a local redis DB, then do the auth
+			// operation. If we're on localhost, we don't need to do this.
+			if(process.env.REDISCLOUD_URL.indexOf('localhost')==-1) {
+				this.redis.auth(redisURL.auth.split(":")[1]);
+			}
 
 			this.redis.on("connect", _.bind(function() {
 				winston.info("Connected to redis!");
@@ -294,7 +300,9 @@ exports.ResultsServer.prototype = {
 				// Delay all outgoing tweets. We delay both the addition of the match
 				// info to the matchesToTweet list AND the immediate proccessing of the
 				// tweet.
+				winston.info("Delaying match handling for: " + match.match_id);
 				setTimeout(_.bind(function() {
+					winston.info("\tDone delaying match handling for " + match.match_id);
 					// push the match info into redis, in case the server restarts before
 					// we process this match.
 					this.saveDelayedMatch(match);
@@ -382,10 +390,15 @@ exports.ResultsServer.prototype = {
 		if(this.redis) {
 			// get the whole list.
 			// don't delete anything though, only do that on successful tweets.
+			winston.info("Loading delayed match information from redis.");
 			this.redis.lrange("global:delayed_matches",0, -1, _.bind(function(err, reply) {
 				if(!err) {
+					if(reply.length==0) {
+						winston.info("No delayed matches found.");
+					}
 					_.each(reply, _.bind(function(match) {
 						// push it onto matchIdsToTweet
+						winston.info("Pushing delayed matches onto list: " + match);
 						this.matchesToTweet.push(JSON.parse(match));
 					}, this));
 				} else {
