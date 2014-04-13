@@ -136,7 +136,7 @@ exports.ResultsServer.prototype = {
 		} else {
 			winston.warn("Redis connection information not available.");
 			this.loadSeries();
-			this.loadDelayedMatchIds();
+			this.loadDelayedMatches();
 		}
 	},
 
@@ -681,9 +681,11 @@ exports.ResultsServer.prototype = {
 				this.altTweet(tweetString, matchMetadata);
 			}
 
+			// I'm not totally sure why this doesn't delay until we get an ack from
+			// the twitter api. That would probably be smarter. But whatever.
 			// now remove the match_id from matchIdsToTweet
 			winston.info("Removing match id after successful tweet: " + matchMetadata.match_id);
-			this.removeMatchFromQueue(matchMetadata.match_id);
+			this.removeMatchFromQueue(matchMetadata);
 
 			// update the listing if there were series wins.
 			// do this late in the process in case there were errors.
@@ -770,6 +772,22 @@ exports.ResultsServer.prototype = {
 		this.matchesToTweet = _.reject(this.matchesToTweet, function(match) {
 			return match.match_id==match.match_id;
 		});
+
+		// Make sure it's not in redis either. 99% of the time it won't be, but
+		// we'll just make absolute sure here. It's a cheap operation and it fails
+		// easily.
+		if(this.redis) {
+			winston.info("Trying to remove " + match.match_id + " from delayed_matches.")
+			this.redis.lrem("global:delayed_matches", JSON.stringify(match),
+				function(err, reply) {
+					if(err) {
+						winston.warn("\tError removing match: " + err);
+					}
+					winston.info("\tRemoved " + reply + " matches.");
+				});
+		} else {
+			winston.warn("No redis instance to remove match from.");
+		}
 	},
 
 	api: function() {
