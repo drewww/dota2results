@@ -131,7 +131,7 @@ exports.ResultsServer.prototype = {
 			this.redis.on("connect", _.bind(function() {
 				winston.info("Connected to redis!");
 				this.loadSeries();
-				this.loadDelayedMatchIds();
+				this.loadDelayedMatches();
 			}, this));
 		} else {
 			winston.warn("Redis connection information not available.");
@@ -279,6 +279,10 @@ exports.ResultsServer.prototype = {
 			// winston.info("Match_id (" + match.match_id + ") is lower than last logged: " + league.mostRecentMatchId);
 			return;
 		} else {
+			// Even in the delay case, we want to adjust this list so that we don't
+			// keep adding the delayed match to the list of tweets multiple times.
+			// In the case where we shutdown after this point, it's okay; we'll work
+			// it out on restart.
 			league.lastSeenMatchIds.push(match.match_id);
 
 			// if we're still in init mode, don't tweet.
@@ -286,9 +290,24 @@ exports.ResultsServer.prototype = {
 				// keep track of match ids that we want to tweet, and if they don't
 				// get successfully processed (ie the get match details call fails, which
 				// happens a distressing amount of the time) then try again later.
-				this.matchesToTweet.push(match);
 
-				this.processFinishedMatch(match);
+				// Delay all outgoing tweets. We delay both the addition of the match
+				// info to the matchesToTweet list AND the immediate proccessing of the
+				// tweet.
+				setTimeout(_.bind(function() {
+					// push the match info into redis, in case the server restarts before
+					// we process this match.
+					this.saveDelayedMatch(match);
+
+					// add the match to the list of matches to tweet
+					this.matchesToTweet.push(match);
+
+					// attempt to proces the match immediately, which will remove it
+					// from the above list if successful. If this particular process
+					// attempt fails due to API errors, then the matchesToTweet checking
+					// will catch it and try again later.
+					this.processFinishedMatch(match);
+				}, this), 1000*120);
 			} else if(league.demo) {
 				// tweet the first thing we encounter just to test, then bail.
 				this.processFinishedMatch(match);
@@ -359,7 +378,7 @@ exports.ResultsServer.prototype = {
 		}
 	},
 
-	loadDelayedMatchIds: function() {
+	loadDelayedMatches: function() {
 		if(this.redis) {
 			// get the whole list.
 			// don't delete anything though, only do that on successful tweets.
@@ -374,7 +393,15 @@ exports.ResultsServer.prototype = {
 				}
 			}, this));
 		} else {
-			winston.warn("No support for loading delayed match ids from disk.");
+			winston.warn("No support for loading delayed matches from disk.");
+		}
+	},
+
+	saveDelayedMatch: function(match) {
+		if(this.redis) {
+			this.redis.rpush("global:delayed_matches", JSON.stringify(match));
+		} else {
+			winston.warn("No support for saving delayed matches to disk.");
 		}
 	},
 
