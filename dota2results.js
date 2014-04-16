@@ -222,7 +222,7 @@ exports.ResultsServer.prototype = {
 			// loop until they succeed and get removed from the list.)
 
 			if(this.matchesToTweet.length > 0) {
-				winston.info(this.matchesToTweet.length + " queued matches that haven't been successfully tweeted, retrying now: " + JSON.stringify(this.matchIdsToTweet));
+				winston.info(this.matchesToTweet.length + " queued matches that haven't been successfully tweeted, retrying now: " + JSON.stringify(this.matchesToTweet));
 				_.each(this.matchesToTweet, _.bind(function(match) {
 					this.processFinishedMatch(match);
 				}, this));
