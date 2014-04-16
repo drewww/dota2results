@@ -392,12 +392,12 @@ exports.ResultsServer.prototype = {
 			// get the whole list.
 			// don't delete anything though, only do that on successful tweets.
 			winston.info("Loading delayed match information from redis.");
-			this.redis.lrange("global:delayed_matches",0, -1, _.bind(function(err, reply) {
+			this.redis.hgetall("global:delayed_matches", _.bind(function(err, reply) {
 				if(!err) {
-					if(reply.length==0) {
+					if(!_.isNull(reply) && reply.length==0) {
 						winston.info("No delayed matches found.");
 					}
-					_.each(reply, _.bind(function(match) {
+					_.each(reply, _.bind(function(match, match_id) {
 						// push it onto matchIdsToTweet
 						winston.info("Pushing delayed matches onto list: " + match);
 						this.matchesToTweet.push(JSON.parse(match));
@@ -413,12 +413,12 @@ exports.ResultsServer.prototype = {
 
 	saveDelayedMatch: function(match) {
 		if(this.redis) {
-			this.redis.rpush("global:delayed_matches", JSON.stringify(match),
+			this.redis.hset("global:delayed_matches",match.match_id,JSON.stringify(match),
 				function(err, reply) {
 					if(err) {
-						winston.warn("Error pushing delayed match info: " + err);
+						winston.warn("Error setting delayed match info: " + err);
 					} else {
-						winston.debug("Reply from pushing deplayed match: " + reply);
+						winston.debug("Reply from setting deplayed match: " + reply);
 					}
 				});
 		} else {
@@ -799,7 +799,7 @@ exports.ResultsServer.prototype = {
 		// easily.
 		if(this.redis) {
 			winston.info("Trying to remove " + match.match_id + " from delayed_matches.")
-			this.redis.lrem("global:delayed_matches", 0, JSON.stringify(match),
+			this.redis.hdel("global:delayed_matches", match.match_id,
 				function(err, reply) {
 					if(err) {
 						winston.warn("\tError removing match: " + err);
