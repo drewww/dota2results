@@ -25,8 +25,30 @@ winston.info("dota2results STARTING");
 //			but to get a list of which leagues to check.
 //				- if we don't have a list of already-seen matchIds, then start one.
 //		c. Compare the list of most recent games for each of the live leagues to
-//			the list of last games we've seen for that league. 
-//		d. If it's a new id, then fetch the full match history for it and tweet it up. 
+//			the list of last games we've seen for that league.
+//		d. If it's a new id, then fetch the full match history for it and tweet it up.
+
+// There's a lot of demand for delaying tweets by two minutes. Options for this:
+//	1. Just do a settimeout on the tweets.
+//		The problem with this strategy is that if the server restarts in that 2 min window, tweets are lost.
+//	2. So, when a match finishes, add it to redis (if redis is present) and do a settimeout of the actual tweet. In that settimeout, remove the id from redis.
+//		We're protected from double-tweets by twitter API, so that failure mode is handled.
+//		It's a little annoying to test this without local redis. But I guess I can deal.
+// So the pieces of this are:
+//		1. Delay all outgoing tweets.
+//		2. Make a note of currently-delayed match Ids, put in redis.
+//		3. After delay, tweet + remove matchId from list.
+//				There's a minor failure mode here; if server shuts down between tweet + removal, it will re-tweet it next time the server starts.
+// Wait a second, lets tink about the actual failure mode here:
+// 1. Get the match-finished event.
+// 2. Process the match, but setTimeout the actual tweet.
+// 3. Server restarts before the tweet goes out.
+// 4. Server reloads, discovers a tweet in the redis queue. Sends it immediately.
+//		- this case is a little weird and could cause a tweet go out not as delayed
+//			as it should. But I don't think we can afford to sweat that.
+//		- only way around that would be to add a time component and that's annoying.
+//		- we should think of this whole system as insurance, and it's okay if we
+//			make a small mistake in timing.
 
 exports.ResultsServer = function() {
 
@@ -85,7 +107,7 @@ exports.ResultsServer.prototype = {
 		//
 		// we'll clean these out when we've seen enough wins (ie 2 for a bo3, 3 for a bo5)
 		// OR when we haven't updated the entry for three days. This should only
-		// really happen if we start this mid-series for anything. But it's important to 
+		// really happen if we start this mid-series for anything. But it's important to
 		// avoid a memory leak.
 		this.activeSeriesIds = {};
 
@@ -103,16 +125,24 @@ exports.ResultsServer.prototype = {
 
 		if("REDISCLOUD_URL" in process.env) {
 			var redisURL = url.parse(process.env.REDISCLOUD_URL);
+
 			this.redis = redis.createClient(redisURL.port, redisURL.hostname, {no_ready_check: true});
-			this.redis.auth(redisURL.auth.split(":")[1]);
+
+			// If it seems like the URL isn't a local redis DB, then do the auth
+			// operation. If we're on localhost, we don't need to do this.
+			if(process.env.REDISCLOUD_URL.indexOf('localhost')==-1) {
+				this.redis.auth(redisURL.auth.split(":")[1]);
+			}
 
 			this.redis.on("connect", _.bind(function() {
 				winston.info("Connected to redis!");
 				this.loadSeries();
+				this.loadDelayedMatches();
 			}, this));
 		} else {
 			winston.warn("Redis connection information not available.");
 			this.loadSeries();
+			this.loadDelayedMatches();
 		}
 	},
 
@@ -160,7 +190,7 @@ exports.ResultsServer.prototype = {
 				var league = this.leagues[leagueId];
 
 				if(_.isUndefined(league.lastSeenMatchIds)) {
-					winston.info("Found un-initialized league: " + league.name);		
+					winston.info("Found un-initialized league: " + league.name);
 					league.lastSeenMatchIds = [];
 					league.init = true;
 				}
@@ -186,11 +216,13 @@ exports.ResultsServer.prototype = {
 			}, this));
 			this.saveLeagues();
 
-			// now check and see if any matches didn't get successfully processed. If so, 
-			// reprocess them.
+			// now check and see if any matches didn't get successfully processed. If so,
+			// reprocess them. (reminder: this happens every live-games:update, not on
+			// server start. This is how we deal with failures; we retry them in this
+			// loop until they succeed and get removed from the list.)
 
 			if(this.matchesToTweet.length > 0) {
-				winston.info(this.matchesToTweet.length + " queued matches that haven't been successfully tweeted, retrying now: " + JSON.stringify(this.matchIdsToTweet));
+				winston.info(this.matchesToTweet.length + " queued matches that haven't been successfully tweeted, retrying now: " + JSON.stringify(this.matchesToTweet));
 				_.each(this.matchesToTweet, _.bind(function(match) {
 					this.processFinishedMatch(match);
 				}, this));
@@ -253,6 +285,10 @@ exports.ResultsServer.prototype = {
 			// winston.info("Match_id (" + match.match_id + ") is lower than last logged: " + league.mostRecentMatchId);
 			return;
 		} else {
+			// Even in the delay case, we want to adjust this list so that we don't
+			// keep adding the delayed match to the list of tweets multiple times.
+			// In the case where we shutdown after this point, it's okay; we'll work
+			// it out on restart.
 			league.lastSeenMatchIds.push(match.match_id);
 
 			// if we're still in init mode, don't tweet.
@@ -260,9 +296,27 @@ exports.ResultsServer.prototype = {
 				// keep track of match ids that we want to tweet, and if they don't
 				// get successfully processed (ie the get match details call fails, which
 				// happens a distressing amount of the time) then try again later.
-				this.matchesToTweet.push(match);
 
-				this.processFinishedMatch(match);
+				// Delay all outgoing tweets. We delay both the addition of the match
+				// info to the matchesToTweet list AND the immediate proccessing of the
+				// tweet.
+				winston.info("Delaying match handling for: " + match.match_id);
+				// push the match info into redis, in case the server restarts before
+				// we process this match.
+				this.saveDelayedMatch(match);
+
+				setTimeout(_.bind(function() {
+					winston.info("\tDone delaying match handling for " + match.match_id);
+
+					// add the match to the list of matches to tweet
+					this.matchesToTweet.push(match);
+
+					// attempt to proces the match immediately, which will remove it
+					// from the above list if successful. If this particular process
+					// attempt fails due to API errors, then the matchesToTweet checking
+					// will catch it and try again later.
+					this.processFinishedMatch(match);
+				}, this), 1000*120);
 			} else if(league.demo) {
 				// tweet the first thing we encounter just to test, then bail.
 				this.processFinishedMatch(match);
@@ -333,6 +387,45 @@ exports.ResultsServer.prototype = {
 		}
 	},
 
+	loadDelayedMatches: function() {
+		if(this.redis) {
+			// get the whole list.
+			// don't delete anything though, only do that on successful tweets.
+			winston.info("Loading delayed match information from redis.");
+			this.redis.hgetall("global:delayed_matches", _.bind(function(err, reply) {
+				if(!err) {
+					if(!_.isNull(reply) && reply.length==0) {
+						winston.info("No delayed matches found.");
+					}
+					_.each(reply, _.bind(function(match, match_id) {
+						// push it onto matchIdsToTweet
+						winston.info("Pushing delayed matches onto list: " + match);
+						this.matchesToTweet.push(JSON.parse(match));
+					}, this));
+				} else {
+					winston.warn("Error loading delayed matches from cache: " + err);
+				}
+			}, this));
+		} else {
+			winston.warn("No support for loading delayed matches from disk.");
+		}
+	},
+
+	saveDelayedMatch: function(match) {
+		if(this.redis) {
+			this.redis.hset("global:delayed_matches",match.match_id,JSON.stringify(match),
+				function(err, reply) {
+					if(err) {
+						winston.warn("Error setting delayed match info: " + err);
+					} else {
+						winston.debug("Reply from setting deplayed match: " + reply);
+					}
+				});
+		} else {
+			winston.warn("No support for saving delayed matches to disk.");
+		}
+	},
+
 	checkForLiveLeagueGames: function() {
 		// winston.info("Checking for live games.");
 		this.api().getLiveLeagueGames(_.bind(function(err, res) {
@@ -370,7 +463,7 @@ exports.ResultsServer.prototype = {
 
 		// only look for games in the last 7 days
 		// (widening this window since if there aren't games in that
-		//  period sometimes we miss the first game for a tournament in 
+		//  period sometimes we miss the first game for a tournament in
 		//	that window.)
 		var date_min = (new Date().getTime()) - 60*60*24*7*1000;
 
@@ -394,7 +487,7 @@ exports.ResultsServer.prototype = {
 			} else {
 				// winston.info(res.matches.length + " matches found for " + league.name);
 			}
-			
+
 			if(this.isDemo) {
 				res.matches = _.first(res.matches, 2);
 			}
@@ -434,7 +527,7 @@ exports.ResultsServer.prototype = {
 			});
 
 			// this is a little unusual; instead of counting kills and crediting the
-			// to the team with the kills, we're changing to count DEATHS of the opposite 
+			// to the team with the kills, we're changing to count DEATHS of the opposite
 			// team and attribute that score to the opposite team. This difference matters
 			// in situations with suicides and neutral denies. This matches the behavior
 			// of the in-game scoreboard, even though it's sort of idiosyncratic.
@@ -478,7 +571,7 @@ exports.ResultsServer.prototype = {
 
 			// now, lets update the series_id information.
 			// first, check and see if this series has been seen before.
-			
+
 			if(matchMetadata.series_type > 0) {
 				winston.debug(JSON.stringify(this.activeSeriesIds));
 
@@ -499,7 +592,7 @@ exports.ResultsServer.prototype = {
 
 				// now update the results based on who won
 				var teamId = teams[0]["team_id"];
-				
+
 				if(teams[1].winner) {
 					teamId = teams[1]["team_id"];
 				}
@@ -514,7 +607,7 @@ exports.ResultsServer.prototype = {
 				_.each([0, 1], function(index) {
 					teams[index].series_wins = seriesStatus.teams[teams[index]["team_id"]]
 
-					var winString = "";					
+					var winString = "";
 					for(var x=0; x<teams[index].series_wins; x++) {
 						winString = winString + "\u25FC";
 					}
@@ -552,7 +645,7 @@ exports.ResultsServer.prototype = {
 				winston.debug("No series data available.");
 			}
 
-			// now push the series status into 
+			// now push the series status into
 
 			var durationString = " " + Math.floor(match.duration/60) + "m";
 
@@ -568,7 +661,7 @@ exports.ResultsServer.prototype = {
 
 			var tweetString = teams[0].wins_string + " " + teams[0].displayName + " " + teams[0].kills + "\u2014" + teams[1].kills + " " + teams[1].displayName + " " + teams[1].wins_string + "\n";
 			tweetString = tweetString + durationString + " / " +league.name + "   \n";
-			
+
 			if((teams[0].kills + teams[1].kills)==0 || match.duration <= 410) {
 				winston.info("Discarding match with 0 kills and 6 minute duration.");
 				this.removeMatchFromQueue(match);
@@ -609,16 +702,18 @@ exports.ResultsServer.prototype = {
 				this.altTweet(tweetString, matchMetadata);
 			}
 
+			// I'm not totally sure why this doesn't delay until we get an ack from
+			// the twitter api. That would probably be smarter. But whatever.
 			// now remove the match_id from matchIdsToTweet
 			winston.info("Removing match id after successful tweet: " + matchMetadata.match_id);
-			this.removeMatchFromQueue(matchMetadata.match_id);
+			this.removeMatchFromQueue(matchMetadata);
 
 			// update the listing if there were series wins.
 			// do this late in the process in case there were errors.
 			if(!_.isNull(teams[0].series_wins)) {
 				this.activeSeriesIds[seriesStatus.series_id] = seriesStatus;
 
-				// cache the series data so it survives a restart. 
+				// cache the series data so it survives a restart.
 				this.saveSeries();
 			}
 			this.cleanupActiveSeries();
@@ -626,7 +721,7 @@ exports.ResultsServer.prototype = {
 	},
 
 	cleanupActiveSeries: function() {
-		// run through all active series. 
+		// run through all active series.
 		var idsToRemove = [];
 		var now = new Date().getTime();
 		_.each(this.activeSeriesIds, function(series, id) {
@@ -698,6 +793,22 @@ exports.ResultsServer.prototype = {
 		this.matchesToTweet = _.reject(this.matchesToTweet, function(match) {
 			return match.match_id==match.match_id;
 		});
+
+		// Make sure it's not in redis either. 99% of the time it won't be, but
+		// we'll just make absolute sure here. It's a cheap operation and it fails
+		// easily.
+		if(this.redis) {
+			winston.info("Trying to remove " + match.match_id + " from delayed_matches.")
+			this.redis.hdel("global:delayed_matches", match.match_id,
+				function(err, reply) {
+					if(err) {
+						winston.warn("\tError removing match: " + err);
+					}
+					winston.info("\tRemoved " + reply + " matches.");
+				});
+		} else {
+			winston.warn("No redis instance to remove match from.");
+		}
 	},
 
 	api: function() {
@@ -730,5 +841,3 @@ server.start();
 process.on('uncaughtException', function(err) {
   winston.error(err.stack);
 });
-
-
