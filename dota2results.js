@@ -481,6 +481,11 @@ exports.ResultsServer.prototype = {
 				return;
 			}
 
+			if(_.isUndefined(res)) {
+				winston.err("Empty response getting recent matches for: " + league.name);
+				return;
+			}
+
 			if(res.total_results == 0) {
 				winston.warn("No matches returned for league_id: " + league.name);
 				return;
