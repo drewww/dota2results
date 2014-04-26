@@ -48,5 +48,6 @@ exports.teams = {
 	55 : "prdota2",
 	1194118 : "Dota2Relax",
 	886928 : "RevivalDragons",
-	162 : "FlipSid3Tactics"
+	162 : "FlipSid3Tactics",
+	1206475: "NewBeeDota2"
 };
