@@ -332,6 +332,11 @@ exports.ResultsServer.prototype = {
 				return;
 			}
 
+			if(_.isUndefined(res)) {
+				winston.error("League listing request returned undefined result.");
+				return;
+			}
+
 			var that = this;
 			this.leagues = {};
 			_.each(res.leagues, function(league) {
