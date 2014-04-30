@@ -189,6 +189,13 @@ exports.ResultsServer.prototype = {
 			_.each(Object.keys(this.activeLeagueIds), _.bind(function(leagueId) {
 				var league = this.leagues[leagueId];
 
+				if(_.isUndefined(league)) {
+					winston.error("League is not defined for " + leagueId);
+					// Not really sure what to do in this case.
+					// really we need to create a new entry in this list, but I'm not sure
+					// what it should have in it.
+				}
+
 				if(_.isUndefined(league.lastSeenMatchIds)) {
 					winston.info("Found un-initialized league: " + league.name);
 					league.lastSeenMatchIds = [];
