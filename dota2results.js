@@ -194,6 +194,11 @@ exports.ResultsServer.prototype = {
 					// Not really sure what to do in this case.
 					// really we need to create a new entry in this list, but I'm not sure
 					// what it should have in it.
+
+					// OH I know what happened. The patch hit, new tickets went out, and
+					// we didn't have them in the list. I think we need to do a full league
+					// update operation.
+					this.updateLeagueListing();
 				}
 
 				if(_.isUndefined(league.lastSeenMatchIds)) {
