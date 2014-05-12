@@ -790,7 +790,7 @@ exports.ResultsServer.prototype = {
 		if(this.isDemo) return;
 		if(this.isSilent) return;
 
-		this.twitterAlt.post('statuses/update', { status: string }, function(err, reply) {
+		this.twitterAlt.post('statuses/update', { status: string }, _.bind(function(err, reply) {
 				if (err) {
 	  				winston.error("Error posting tweet: " + err);
 
@@ -801,14 +801,14 @@ exports.ResultsServer.prototype = {
 				} else {
 	  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
 				}
-  		});
+  		}, this);
 	},
 
 	_tweet: function(string, match) {
 		if(this.isDemo) return;
 		if(this.isSilent) return;
 
-		this.twitter.post('statuses/update', { status: string }, function(err, reply) {
+		this.twitter.post('statuses/update', { status: string }, _.bind(function(err, reply) {
 				if (err) {
 	  				winston.error("Error posting tweet: " + err);
 
@@ -819,7 +819,7 @@ exports.ResultsServer.prototype = {
 				} else {
 	  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
 				}
-  		});
+  		}, this);
 	},
 
 	removeMatchFromQueue: function(match) {
