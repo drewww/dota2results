@@ -317,6 +317,17 @@ exports.ResultsServer.prototype = {
 				// we process this match.
 				this.saveDelayedMatch(match);
 
+				// by default, delay for two minutes.
+				var delayDuration = 1000*120;
+
+				// it seems like the international ticket delays for 5 minutes,
+				// so check for that specific ticket and delay those tweets for longer.
+				// this is hardcoded; check this each year.
+				if(league.leagueid==600) {
+					winston.debug("Setting custom delay duration for TI4 ticket.");
+					delayDuration = 1000*60*5;
+				}
+
 				setTimeout(_.bind(function() {
 					winston.info("\tDone delaying match handling for " + match.match_id);
 
@@ -328,7 +339,7 @@ exports.ResultsServer.prototype = {
 					// attempt fails due to API errors, then the matchesToTweet checking
 					// will catch it and try again later.
 					this.processFinishedMatch(match);
-				}, this), 1000*120);
+				}, this), delayDuration);
 			} else if(league.demo) {
 				// tweet the first thing we encounter just to test, then bail.
 				this.processFinishedMatch(match);
