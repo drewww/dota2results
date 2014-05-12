@@ -801,7 +801,7 @@ exports.ResultsServer.prototype = {
 				} else {
 	  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
 				}
-  		}, this);
+  		}, this));
 	},
 
 	_tweet: function(string, match) {
@@ -819,7 +819,7 @@ exports.ResultsServer.prototype = {
 				} else {
 	  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
 				}
-  		}, this);
+  		}, this));
 	},
 
 	removeMatchFromQueue: function(match) {
