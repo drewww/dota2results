@@ -6,11 +6,19 @@ var request = require('request'),
 	EventEmitter = require('events').EventEmitter,
 	fs = require('fs'),
 	twit = require('twit'),
+	mandrill = require('mandrill-api/mandrill'),
 	team_twitter = require('./twitter_handles.js').teams;
+
+
 
 if("REDISCLOUD_URL" in process.env) {
 	var redis = require('redis'),
 		url = require('url');
+}
+
+var mc = null;
+if("MANDRILL_KEY" in process.env) {
+	var mc = new mandrill.Mandrill(process.env["MANDRILL_KEY"]);
 }
 
 winston.cli();
@@ -820,6 +828,16 @@ exports.ResultsServer.prototype = {
 	  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
 				}
   		}, this));
+	},
+
+	email: function(string, match) {
+		if(_.isNull(mc)) {
+			winston.error("No mandrill client initialized, rejecting email.");
+			return;
+		}
+
+		// send the actual email.
+
 	},
 
 	removeMatchFromQueue: function(match) {
