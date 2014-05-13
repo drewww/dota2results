@@ -747,7 +747,6 @@ exports.ResultsServer.prototype = {
 			if(!isBlacklisted) {
 				winston.info("TWEET: " + tweetString);
 				this.tweet(tweetString, matchMetadata);
-
 				this.email(tweetString, matchMetadata);
 			} else {
 				winston.info("TWEET.ALT: " + tweetString);
@@ -847,7 +846,7 @@ exports.ResultsServer.prototype = {
 			return;
 		}
 
-		if(this.subscribers.length > 0) {
+		if(this.subscribers.length==0) {
 			winston.error("No subscribers specified, rejecting email.");
 			return;
 		}
@@ -862,12 +861,17 @@ exports.ResultsServer.prototype = {
 			"to": to,
 			"subject": string.split("\n")[0],
 			"preserve_recipient": false,
-			"track_clicks": true,
+			"track_clicks": false,
 			"from_email": "drew.harry@gmail.com",
 			"from_name": "Dota 2 Results"
 		};
 
-		mc.messages.send({message:message});
+		mc.messages.send({message:message}, function(result) {
+			winston.info("Email sent, result: " + JSON.stringify(result));
+		},
+		function(e) {
+			winston.warning("Error sending email: " + e.name + ": " + e.message);
+		});
 	},
 
 	removeMatchFromQueue: function(match) {
