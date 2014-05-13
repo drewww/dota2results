@@ -12,3 +12,5 @@ export TWITTER_ALT_ACCESS_TOKEN_SECRET='...'
 export STEAM_API_KEY='...'
 
 export BLACKLISTED_LEAGUE_IDS='[]'
+
+export MANDRILL_KEY='...'
