@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "author": "Drew Harry <drew.harry@gmail.com>",
   "description": "a twitter bot that auto-posts results of professional Dota 2 matches",
-  "contributors": [ 
+  "contributors": [
     {
       "name": "Drew Hary",
       "email": "drew.harry@gmail.com"
-    } 
+    }
   ],
   "scripts": {
     "start": "node ./dota2results.js",
@@ -24,7 +24,8 @@
     "request": "2.x",
     "dazzle": "*",
     "underscore": "*",
-    "redis" : "*"
+    "redis" : "*",
+    "mailchimp-api" : "2.x"
   },
   "license": "GPL v2",
   "engines": {
