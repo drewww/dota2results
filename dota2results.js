@@ -575,7 +575,7 @@ exports.ResultsServer.prototype = {
 		_.each(["radiant", "dire"], function(name) {
 			var team = {};
 			_.each(["name", "team_id", "logo", "team_complete"], function(param) {
-				team[param] = match[name+"_"+param];
+				team[param] = matchDetails[name+"_"+param];
 			});
 			team["side"] = name;
 
@@ -596,12 +596,6 @@ exports.ResultsServer.prototype = {
 
 			teams[index].kills += player.deaths;
 		});
-
-		if(_.isUndefined(teams[0].name) || _.isUndefined(teams[1].name)) {
-			winston.warn("Found team with undefined name. Probably a pickup league, ignoring.");
-			this.removeMatchFromQueue(matchDetails);
-			return;
-		}
 
 		// Check if we have a twitter handle for this team id.
 		_.each(teams, function(team) {
@@ -750,8 +744,11 @@ exports.ResultsServer.prototype = {
 	isValidMatch: function(results) {
 		// takes the object returned from processMatchDetails, and returns
 		// true/false depending on whether it's a "real" match.
-		if((results.teams[0].kills + results.teams[1].kills)==0 || match.duration <= 410) {
+		if((results.teams[0].kills + results.teams[1].kills)==0 || results.duration <= 410) {
 			winston.info("Discarding match with 0 kills and 6 minute duration.");
+			return false;
+		} else if(_.isUndefined(results.teams[0].name) || _.isUndefined(results.teams[1].name)) {
+			winston.warn("Discarding match with an undefined team name.");
 			return false;
 		} else {
 			return true;
@@ -759,6 +756,7 @@ exports.ResultsServer.prototype = {
 	},
 
 	handleFinishedMatch: function(match, matchMetadata) {
+
 		var results = this.processMatchDetails(match, matchMetadata);
 
 		// drop out, but mark this match as processed.
@@ -767,15 +765,17 @@ exports.ResultsServer.prototype = {
 			return;
 		}
 
+		winston.info(JSON.stringify(results));
+
 		var isBlacklisted = _.contains(this.blacklistedLeagueIds, match.leagueid);
 
 		if(!isBlacklisted) {
-			winston.info("TWEET: " + tweetString);
-			this.tweet(tweetString, matchMetadata);
-			this.email(tweetString, matchMetadata);
+			winston.info("TWEET: " + results.message);
+			this.tweet(results.message, matchMetadata);
+			this.email(results.message, matchMetadata);
 		} else {
-			winston.info("TWEET.ALT: " + tweetString);
-			this.altTweet(tweetString, matchMetadata);
+			winston.info("TWEET.ALT: " + results.message);
+			this.altTweet(results.message, matchMetadata);
 		}
 
 		// I'm not totally sure why this doesn't delay until we get an ack from
@@ -786,7 +786,7 @@ exports.ResultsServer.prototype = {
 
 		// update the listing if there were series wins.
 		// do this late in the process in case there were errors.
-		if(!_.isNull(teams[0].series_wins)) {
+		if(!_.isNull(results.teams[0].series_wins)) {
 			this.activeSeriesIds[seriesStatus.series_id] = seriesStatus;
 
 			// cache the series data so it survives a restart.
