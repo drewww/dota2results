@@ -88,6 +88,8 @@ exports.ResultsServer.prototype = {
 
 	redis: null,
 
+	subscribers: null,
+
 	init: function(isDemo, isSilent) {
 		winston.info("INIT ResultsServer");
 
@@ -100,6 +102,13 @@ exports.ResultsServer.prototype = {
 			this.lastLeagueUpdate = new Date().getTime();
 		} catch (e) {
 			this.leagues = {};
+		}
+
+		this.subscribers = [];
+		if("SUBSCRIBERS" in process.env) {
+			this.subscribers = JSON.parse(process.env.SUBSCRIBERS);
+			winston.info("Initialized subscriber list: " +
+				JSON.stringify(this.subscribers));
 		}
 
 		this.matchesToTweet = [];
@@ -738,6 +747,8 @@ exports.ResultsServer.prototype = {
 			if(!isBlacklisted) {
 				winston.info("TWEET: " + tweetString);
 				this.tweet(tweetString, matchMetadata);
+
+				this.email(tweetString, matchMetadata);
 			} else {
 				winston.info("TWEET.ALT: " + tweetString);
 				this.altTweet(tweetString, matchMetadata);
@@ -836,8 +847,27 @@ exports.ResultsServer.prototype = {
 			return;
 		}
 
-		// send the actual email.
+		if(this.subscribers.length > 0) {
+			winston.error("No subscribers specified, rejecting email.");
+			return;
+		}
 
+		var to = _.map(this.subscribers, function(sub) {
+			return {email: sub};
+		});
+
+		// send the actual email.
+		var message = {
+			"text": string,
+			"to": to,
+			"subject": string.split("\n")[0],
+			"preserve_recipient": false,
+			"track_clicks": true,
+			"from_email": "drew.harry@gmail.com",
+			"from_name": "Dota 2 Results"
+		};
+
+		mc.messages.send({message:message});
 	},
 
 	removeMatchFromQueue: function(match) {
