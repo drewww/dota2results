@@ -345,6 +345,9 @@ exports.ResultsServer.prototype = {
 				// now, we're going to issue a loadMatchDetails call that JUST sends
 				// the email (if appropriate) rather than doing all the other stuff
 				// related to official tweeting.
+
+				// we culd probably check to see if this league_id is blacklisted; if it
+				// is, then we're not going to email anyway and could skip this load.
 				this.loadMatchDetails(match, _.bind(this.handleFinishedMatchEarly, this));
 
 				// by default, delay for two minutes.
