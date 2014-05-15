@@ -342,6 +342,11 @@ exports.ResultsServer.prototype = {
 				// we process this match.
 				this.saveDelayedMatch(match);
 
+				// now, we're going to issue a loadMatchDetails call that JUST sends
+				// the email (if appropriate) rather than doing all the other stuff
+				// related to official tweeting.
+				this.loadMatchDetails(match, _.bind(this.handleFinishedMatchEarly, this));
+
 				// by default, delay for two minutes.
 				var delayDuration = 1000*120;
 
@@ -563,7 +568,7 @@ exports.ResultsServer.prototype = {
 
 	loadMatchDetails: function(matchMetadata, cb) {
 		// check to see if we have a cached result for this match.
-		winston.info("contents of matchDetailsCache: " + JSON.stringify(this.matchDetailsCache));
+		winston.info("contents of matchDetailsCache: " + JSON.stringify(Object.keys(this.matchDetailsCache)));
 
 		if(matchMetadata.match_id in this.matchDetailsCache) {
 			// return that result.
@@ -582,6 +587,8 @@ exports.ResultsServer.prototype = {
 				// these. But any other type of error we want to toss it.
 				return;
 			}
+
+			this.matchDetailsCache[matchMetadata.match_id] = match;
 
 			cb && cb(match, matchMetadata);
 		}, this));
@@ -755,7 +762,8 @@ exports.ResultsServer.prototype = {
 		// but I think it is.
 		tweetString = tweetString + "\nhttp://dotabuff.com/matches/" + matchMetadata.match_id;
 
-		return {message: tweetString, teams:teams, duration:matchDetails.duration};
+		return {message: tweetString, teams:teams, duration:matchDetails.duration,
+						seriesStatus: seriesStatus};
 	},
 
 	isValidMatch: function(results) {
@@ -769,6 +777,23 @@ exports.ResultsServer.prototype = {
 			return false;
 		} else {
 			return true;
+		}
+	},
+
+	handleFinishedMatchEarly: function(match, matchMetadata) {
+		// this version of handle finished match is called as soon as we get a
+		// result, so we can get a non-delayed version of the results. It does
+		// some of the same things as handleFinishedMatch, but has some slightly
+		// different behaviors.
+		winston.info("")
+		var results = this.processMatchDetails(match, matchMetadata);
+		var isBlacklisted = _.contains(this.blacklistedLeagueIds, match.leagueid);
+
+		// TODO only do this if !isBlacklisted, but for testing purposes do it every
+		// time.
+		if(this.isValidMatch(results)) {
+			winston.info("emailing for match: " + match.match_id);
+			this.email(results.message, matchMetadata);
 		}
 	},
 
@@ -789,7 +814,6 @@ exports.ResultsServer.prototype = {
 		if(!isBlacklisted) {
 			winston.info("TWEET: " + results.message);
 			this.tweet(results.message, matchMetadata);
-			this.email(results.message, matchMetadata);
 		} else {
 			winston.info("TWEET.ALT: " + results.message);
 			this.altTweet(results.message, matchMetadata);
@@ -804,7 +828,7 @@ exports.ResultsServer.prototype = {
 		// update the listing if there were series wins.
 		// do this late in the process in case there were errors.
 		if(!_.isNull(results.teams[0].series_wins)) {
-			this.activeSeriesIds[seriesStatus.series_id] = seriesStatus;
+			this.activeSeriesIds[results.seriesStatus.series_id] = results.seriesStatus;
 
 			// cache the series data so it survives a restart.
 			this.saveSeries();
@@ -921,9 +945,7 @@ exports.ResultsServer.prototype = {
 		});
 
 		// remove the details cache too to keep it from accumulating.
-		this.matchDetailsCache = _.reject(this.matchDetailsCache, function(m) {
-			return m.match_id==match.match_id;
-		});
+		delete this.matchDetailsCache[match.match_id];
 
 		// Make sure it's not in redis either. 99% of the time it won't be, but
 		// we'll just make absolute sure here. It's a cheap operation and it fails
