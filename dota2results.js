@@ -935,7 +935,7 @@ exports.ResultsServer.prototype = {
 	},
 
 	removeMatchFromQueue: function(match) {
-		winston.debug("Removing match id after successful tweet: " + matchMetadata.match_id);
+		winston.debug("Removing match id after successful tweet: " + match.match_id);
 
 		this.matchesToTweet = _.reject(this.matchesToTweet, function(m) {
 			return m.match_id==match.match_id;
