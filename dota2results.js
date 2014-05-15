@@ -99,6 +99,10 @@ exports.ResultsServer.prototype = {
 		// with an active game.
 		this.activeLeagueIds = {};
 
+		// the match details cache relates match_ids to a full
+		// JSON response from the server. They're cleaned out
+		// at the same time as matchesToTweet is cleaned out,
+		// to avoid them accumulating forever.
 		this.matchDetailsCache = {};
 
 		try {
@@ -558,6 +562,19 @@ exports.ResultsServer.prototype = {
 	},
 
 	loadMatchDetails: function(matchMetadata, cb) {
+		// check to see if we have a cached result for this match.
+		winston.info("contents of matchDetailsCache: " + JSON.stringify(this.matchDetailsCache));
+
+		if(matchMetadata.match_id in this.matchDetailsCache) {
+			// return that result.
+			var match = this.matchDetailsCache[matchMetadata.match_id];
+			winston.info("Loading match metadata from cache from earlier request.");
+			cb && cb(match, matchMetadata);
+
+			// drop out and avoid making the actual request.
+			return;
+		}
+
 		this.api().getMatchDetails(matchMetadata.match_id, _.bind(function(err, match) {
 			if(err) {
 				winston.error("error loading match: " + err);
@@ -899,8 +916,13 @@ exports.ResultsServer.prototype = {
 	},
 
 	removeMatchFromQueue: function(match) {
-		this.matchesToTweet = _.reject(this.matchesToTweet, function(match) {
-			return match.match_id==match.match_id;
+		this.matchesToTweet = _.reject(this.matchesToTweet, function(m) {
+			return m.match_id==match.match_id;
+		});
+
+		// remove the details cache too to keep it from accumulating.
+		this.matchDetailsCache = _.reject(this.matchDetailsCache, function(m) {
+			return m.match_id==match.match_id;
 		});
 
 		// Make sure it's not in redis either. 99% of the time it won't be, but
