@@ -624,7 +624,6 @@ exports.ResultsServer.prototype = {
 		// Check if we have a twitter handle for this team id.
 		_.each(teams, function(team) {
 			if(team.team_id in team_twitter) {
-				winston.info("Replacing " + team.name + " with @" + team_twitter[team.team_id]);
 				team.name = "@" + team_twitter[team.team_id];
 			} else {
 				winston.info("No twitter handle found for team: " + team.name + " (" + team.team_id + ")");
@@ -712,13 +711,11 @@ exports.ResultsServer.prototype = {
 			// move the information into the teams objects for convenience
 			teams[0].series_wins = seriesStatus.teams[teams[0]["team_id"]]
 			teams[1].series_wins = seriesStatus.teams[teams[1]["team_id"]]
-			winston.debug("Series win info: " + teams[0].series_wins + " - " + teams[1].series_wins);
 		} else {
 			teams[0].series_wins = null;
 			teams[1].series_wins = null;
 			teams[0].wins_string = "";
 			teams[1].wins_string = "";
-			winston.debug("No series data available.");
 		}
 
 		// now push the series status into
@@ -770,10 +767,8 @@ exports.ResultsServer.prototype = {
 		// takes the object returned from processMatchDetails, and returns
 		// true/false depending on whether it's a "real" match.
 		if((results.teams[0].kills + results.teams[1].kills)==0 || results.duration <= 410) {
-			winston.info("Discarding match with 0 kills and 6 minute duration.");
 			return false;
 		} else if(_.isUndefined(results.teams[0].name) || _.isUndefined(results.teams[1].name)) {
-			winston.warn("Discarding match with an undefined team name.");
 			return false;
 		} else {
 			return true;
@@ -785,13 +780,10 @@ exports.ResultsServer.prototype = {
 		// result, so we can get a non-delayed version of the results. It does
 		// some of the same things as handleFinishedMatch, but has some slightly
 		// different behaviors.
-		winston.info("")
 		var results = this.processMatchDetails(match, matchMetadata);
 		var isBlacklisted = _.contains(this.blacklistedLeagueIds, match.leagueid);
 
-		// TODO only do this if !isBlacklisted, but for testing purposes do it every
-		// time.
-		if(this.isValidMatch(results)) {
+		if(this.isValidMatch(results) && !isBlacklisted) {
 			winston.info("emailing for match: " + match.match_id);
 			this.email(results.message, matchMetadata);
 		}
@@ -822,7 +814,6 @@ exports.ResultsServer.prototype = {
 		// I'm not totally sure why this doesn't delay until we get an ack from
 		// the twitter api. That would probably be smarter. But whatever.
 		// now remove the match_id from matchIdsToTweet
-		winston.info("Removing match id after successful tweet: " + matchMetadata.match_id);
 		this.removeMatchFromQueue(matchMetadata);
 
 		// update the listing if there were series wins.
@@ -940,6 +931,8 @@ exports.ResultsServer.prototype = {
 	},
 
 	removeMatchFromQueue: function(match) {
+		winston.debug("Removing match id after successful tweet: " + matchMetadata.match_id);
+
 		this.matchesToTweet = _.reject(this.matchesToTweet, function(m) {
 			return m.match_id==match.match_id;
 		});
@@ -951,7 +944,7 @@ exports.ResultsServer.prototype = {
 		// we'll just make absolute sure here. It's a cheap operation and it fails
 		// easily.
 		if(this.redis) {
-			winston.info("Trying to remove " + match.match_id + " from delayed_matches.")
+			winston.debug("Trying to remove " + match.match_id + " from delayed_matches.")
 			this.redis.hdel("global:delayed_matches", match.match_id,
 				function(err, reply) {
 					if(err) {
