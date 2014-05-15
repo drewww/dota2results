@@ -861,8 +861,10 @@ exports.ResultsServer.prototype = {
 	// should really abstract this properly but I'm lazy right now and
 	// don't want to deal with the throttle function and arguments.
 	_altTweet: function(string, match) {
-		if(this.isDemo) return;
-		if(this.isSilent) return;
+		if(this.isDemo || this.isSilent) {
+			this.removeMatchFromQueue(match);
+			return;
+		}
 
 		this.twitterAlt.post('statuses/update', { status: string }, _.bind(function(err, reply) {
 				if (err) {
@@ -879,8 +881,10 @@ exports.ResultsServer.prototype = {
 	},
 
 	_tweet: function(string, match) {
-		if(this.isDemo) return;
-		if(this.isSilent) return;
+		if(this.isDemo || this.isSilent) {
+			this.removeMatchFromQueue(match);
+			return;
+		}
 
 		this.twitter.post('statuses/update', { status: string }, _.bind(function(err, reply) {
 				if (err) {
