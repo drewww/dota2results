@@ -655,7 +655,7 @@ exports.ResultsServer.prototype = {
 
 			var seriesStatus;
 			if(matchMetadata.series_id in this.activeSeriesIds) {
-				seriesStatus = this.activeSeriesIds[matchMetadata.series_id]
+				seriesStatus = _.clone(this.activeSeriesIds[matchMetadata.series_id]);
 			} else {
 				seriesStatus = {
 					series_id: matchMetadata.series_id,
