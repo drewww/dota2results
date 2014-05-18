@@ -348,7 +348,7 @@ exports.ResultsServer.prototype = {
 
 				// we culd probably check to see if this league_id is blacklisted; if it
 				// is, then we're not going to email anyway and could skip this load.
-				this.loadMatchDetails(match, _.bind(this.handleFinishedMatchEarly, this));
+				// this.loadMatchDetails(match, _.bind(this.handleFinishedMatchEarly, this));
 
 				// by default, delay for two minutes.
 				var delayDuration = 1000*120;
