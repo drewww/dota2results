@@ -543,7 +543,7 @@ exports.ResultsServer.prototype = {
 			}
 
 			if(_.isUndefined(res)) {
-				winston.err("Empty response getting recent matches for: " + league.name);
+				winston.error("Empty response getting recent matches for: " + league.name);
 				return;
 			}
 
