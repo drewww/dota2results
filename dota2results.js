@@ -358,7 +358,11 @@ exports.ResultsServer.prototype = {
 				// this is hardcoded; check this each year.
 				if(league.leagueid==600) {
 					winston.debug("Setting custom delay duration for TI4 ticket.");
-					delayDuration = 1000*60*5;
+					// delayDuration = 1000*60*5;
+
+					// for the chinese quals, it's played in a LAN format with
+					// no delay on the stream.
+					delayDuration = 0;
 				}
 
 				setTimeout(_.bind(function() {
