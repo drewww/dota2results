@@ -35,4 +35,4 @@ Future Directions
   * Auto-generate images to include in the tweets that provide a visual summary of the match, ala the end-game scoreboard.
   * Live-tweet significant moments in matches (ie big team fights, towers going down, etc); requires access to the real time DotaTV stream or other real-time data.
   * Find a way to tap into the premier/professional/amateur categories to auto-group tournaments into different categories.
-  * Provide an email list for people who want non-delayed results (this is primarily for people in esports production roles who need advice notice for production tasks)
+  * Provide an email list for people who want non-delayed results (this is primarily for people in esports production roles who need advance notice for production tasks)
