@@ -650,7 +650,8 @@ exports.ResultsServer.prototype = {
 		// first, check and see if this series has been seen before.
 
 		if(matchMetadata.series_type > 0) {
-			winston.debug(JSON.stringify(this.activeSeriesIds));
+			winston.debug("ACTIVE SERIES: " + matchMetadata.series_id);
+			winston.debug("activeSeriesIds:" + JSON.stringify(this.activeSeriesIds));
 
 			var seriesStatus;
 			if(matchMetadata.series_id in this.activeSeriesIds) {
@@ -713,6 +714,8 @@ exports.ResultsServer.prototype = {
 			// move the information into the teams objects for convenience
 			teams[0].series_wins = seriesStatus.teams[teams[0]["team_id"]]
 			teams[1].series_wins = seriesStatus.teams[teams[1]["team_id"]]
+
+			winston.debug("activeSeriesIds POST:" + JSON.stringify(this.activeSeriesIds));
 		} else {
 			teams[0].series_wins = null;
 			teams[1].series_wins = null;
@@ -761,8 +764,12 @@ exports.ResultsServer.prototype = {
 		// but I think it is.
 		tweetString = tweetString + "\nhttp://dotabuff.com/matches/" + matchMetadata.match_id;
 
-		return {message: tweetString, teams:teams, duration:matchDetails.duration,
+		var result = {message: tweetString, teams:teams, duration:matchDetails.duration,
 						seriesStatus: seriesStatus};
+
+
+
+		return result;
 	},
 
 	isValidMatch: function(results) {
@@ -792,7 +799,6 @@ exports.ResultsServer.prototype = {
 	},
 
 	handleFinishedMatch: function(match, matchMetadata) {
-
 		var results = this.processMatchDetails(match, matchMetadata);
 
 		// drop out, but mark this match as processed.
@@ -822,7 +828,7 @@ exports.ResultsServer.prototype = {
 		// do this late in the process in case there were errors.
 		if(!_.isNull(results.teams[0].series_wins)) {
 			this.activeSeriesIds[results.seriesStatus.series_id] = results.seriesStatus;
-
+			winston.info("In handleFinishedMatch, save series status. Result: " + JSON.stringify(this.activeSeriesIds));
 			// cache the series data so it survives a restart.
 			this.saveSeries();
 		}
