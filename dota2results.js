@@ -426,7 +426,7 @@ exports.ResultsServer.prototype = {
 
 	loadSeries: function() {
 		if(this.redis) {
-			this.redis.get("global:series", function(err, reply) {
+			this.redis.get("global:series", _.bind(function(err, reply) {
 				if(!err) {
 					this.activeSeriesIds = JSON.parse(reply);
 					winston.info("Loading series from cache: " + JSON.stringify(this.activeSeriesIds));
@@ -434,7 +434,7 @@ exports.ResultsServer.prototype = {
 					winston.warn("Error loading series from cache: " + err + "; defaulting to empty.");
 					this.activeSeriesIds = {};
 				}
-			});
+			}, this));
 		} else {
 			try {
 				this.activeSeriesIds = JSON.parse(fs.readFileSync("/tmp/series.json", {encoding:"utf8"}));
