@@ -90,12 +90,20 @@ exports.ResultsServer.prototype = {
 
 	subscribers: null,
 
+	matchDetailsCache: null,
+
 	init: function(isDemo, isSilent) {
 		winston.info("INIT ResultsServer");
 
 		// maps leagueIds to times we last saw that league
 		// with an active game.
 		this.activeLeagueIds = {};
+
+		// the match details cache relates match_ids to a full
+		// JSON response from the server. They're cleaned out
+		// at the same time as matchesToTweet is cleaned out,
+		// to avoid them accumulating forever.
+		this.matchDetailsCache = {};
 
 		try {
 			this.leagues = require('/tmp/leagues.json');
@@ -253,7 +261,7 @@ exports.ResultsServer.prototype = {
 			if(this.matchesToTweet.length > 0) {
 				winston.info(this.matchesToTweet.length + " queued matches that haven't been successfully tweeted, retrying now: " + JSON.stringify(this.matchesToTweet));
 				_.each(this.matchesToTweet, _.bind(function(match) {
-					this.processFinishedMatch(match);
+					this.loadMatchDetails(match, _.bind(this.handleFinishedMatch, this));
 				}, this));
 			}
 		}, this));
@@ -334,6 +342,14 @@ exports.ResultsServer.prototype = {
 				// we process this match.
 				this.saveDelayedMatch(match);
 
+				// now, we're going to issue a loadMatchDetails call that JUST sends
+				// the email (if appropriate) rather than doing all the other stuff
+				// related to official tweeting.
+
+				// we culd probably check to see if this league_id is blacklisted; if it
+				// is, then we're not going to email anyway and could skip this load.
+				// this.loadMatchDetails(match, _.bind(this.handleFinishedMatchEarly, this));
+
 				// by default, delay for two minutes.
 				var delayDuration = 1000*120;
 
@@ -341,7 +357,6 @@ exports.ResultsServer.prototype = {
 				// so check for that specific ticket and delay those tweets for longer.
 				// this is hardcoded; check this each year.
 				if(league.leagueid==600) {
-					winston.debug("Setting custom delay duration for TI4 ticket.");
 					delayDuration = 1000*60*5;
 				}
 
@@ -355,11 +370,11 @@ exports.ResultsServer.prototype = {
 					// from the above list if successful. If this particular process
 					// attempt fails due to API errors, then the matchesToTweet checking
 					// will catch it and try again later.
-					this.processFinishedMatch(match);
+					this.loadMatchDetails(match, _.bind(this.handleFinishedMatch, this));
 				}, this), delayDuration);
 			} else if(league.demo) {
 				// tweet the first thing we encounter just to test, then bail.
-				this.processFinishedMatch(match);
+				this.loadMatchDetails(match, _.bind(this.handleFinishedMatch, this));
 			}
 		}
 	},
@@ -411,7 +426,7 @@ exports.ResultsServer.prototype = {
 
 	loadSeries: function() {
 		if(this.redis) {
-			this.redis.get("global:series", function(err, reply) {
+			this.redis.get("global:series", _.bind(function(err, reply) {
 				if(!err) {
 					this.activeSeriesIds = JSON.parse(reply);
 					winston.info("Loading series from cache: " + JSON.stringify(this.activeSeriesIds));
@@ -419,7 +434,7 @@ exports.ResultsServer.prototype = {
 					winston.warn("Error loading series from cache: " + err + "; defaulting to empty.");
 					this.activeSeriesIds = {};
 				}
-			});
+			}, this));
 		} else {
 			try {
 				this.activeSeriesIds = JSON.parse(fs.readFileSync("/tmp/series.json", {encoding:"utf8"}));
@@ -527,7 +542,7 @@ exports.ResultsServer.prototype = {
 			}
 
 			if(_.isUndefined(res)) {
-				winston.err("Empty response getting recent matches for: " + league.name);
+				winston.error("Empty response getting recent matches for: " + league.name);
 				return;
 			}
 
@@ -553,8 +568,20 @@ exports.ResultsServer.prototype = {
 		}, this));
 	},
 
-	processFinishedMatch: function(matchMetadata) {
-		winston.info("Loading match to tweet: " + matchMetadata.match_id);
+	loadMatchDetails: function(matchMetadata, cb) {
+		// check to see if we have a cached result for this match.
+		winston.info("contents of matchDetailsCache: " + JSON.stringify(Object.keys(this.matchDetailsCache)));
+
+		if(matchMetadata.match_id in this.matchDetailsCache) {
+			// return that result.
+			var match = this.matchDetailsCache[matchMetadata.match_id];
+			winston.info("Loading match metadata from cache from earlier request.");
+			cb && cb(match, matchMetadata);
+
+			// drop out and avoid making the actual request.
+			return;
+		}
+
 		this.api().getMatchDetails(matchMetadata.match_id, _.bind(function(err, match) {
 			if(err) {
 				winston.error("error loading match: " + err);
@@ -563,212 +590,249 @@ exports.ResultsServer.prototype = {
 				return;
 			}
 
-			var teams = [];
-			_.each(["radiant", "dire"], function(name) {
-				var team = {};
-				_.each(["name", "team_id", "logo", "team_complete"], function(param) {
-					team[param] = match[name+"_"+param];
-				});
-				team["side"] = name;
+			this.matchDetailsCache[matchMetadata.match_id] = match;
 
-				team.kills = 0;
-
-				teams.push(team);
-			});
-
-			// this is a little unusual; instead of counting kills and crediting the
-			// to the team with the kills, we're changing to count DEATHS of the opposite
-			// team and attribute that score to the opposite team. This difference matters
-			// in situations with suicides and neutral denies. This matches the behavior
-			// of the in-game scoreboard, even though it's sort of idiosyncratic.
-			// Thanks to @datdota for pointing out this inconsistency.
-			_.each(match.players, function(player) {
-				var index = 1;
-				if(player.player_slot >= 128) index = 0;
-
-				teams[index].kills += player.deaths;
-			});
-
-			if(_.isUndefined(teams[0].name) || _.isUndefined(teams[1].name)) {
-				winston.warn("Found team with undefined name. Probably a pickup league, ignoring.");
-				this.removeMatchFromQueue(match);
-				return;
-			}
-
-			// Check if we have a twitter handle for this team id.
-			_.each(teams, function(team) {
-				if(team.team_id in team_twitter) {
-					winston.info("Replacing " + team.name + " with @" + team_twitter[team.team_id]);
-					team.name = "@" + team_twitter[team.team_id];
-				} else {
-					winston.info("No twitter handle found for team: " + team.name + " (" + team.team_id + ")");
-				}
-			});
-
-			if(match.radiant_win) {
-				teams[0].winner = true;
-				teams[1].winner = false;
-
-				teams[0].displayName = "[" + teams[0].name + "]";
-				teams[1].displayName = teams[1].name;
-			} else {
-				teams[0].winner = false;
-				teams[1].winner = true;
-
-				teams[0].displayName = teams[0].name;
-				teams[1].displayName = "[" + teams[1].name + "]";
-			}
-
-			// now, lets update the series_id information.
-			// first, check and see if this series has been seen before.
-
-			if(matchMetadata.series_type > 0) {
-				winston.debug(JSON.stringify(this.activeSeriesIds));
-
-				var seriesStatus;
-				if(matchMetadata.series_id in this.activeSeriesIds) {
-					seriesStatus = this.activeSeriesIds[matchMetadata.series_id]
-				} else {
-					seriesStatus = {
-						series_id: matchMetadata.series_id,
-						series_type: matchMetadata.series_type,
-						teams: {},
-						time: new Date().getTime()
-					}
-
-					seriesStatus.teams[teams[0]["team_id"]] = 0;
-					seriesStatus.teams[teams[1]["team_id"]] = 0;
-				}
-
-				// now update the results based on who won
-				var teamId = teams[0]["team_id"];
-
-				if(teams[1].winner) {
-					teamId = teams[1]["team_id"];
-				}
-
-				seriesStatus.teams[teamId] = seriesStatus.teams[teamId]+1;
-				seriesStatus.time = new Date().getTime();
-
-				// construct a string where it has filled in circles for every
-				// win, and empty circles to fill into the total number of games
-				// necessary.
-
-				_.each([0, 1], function(index) {
-					teams[index].series_wins = seriesStatus.teams[teams[index]["team_id"]]
-
-					var winString = "";
-					for(var x=0; x<teams[index].series_wins; x++) {
-						winString = winString + "\u25FC";
-					}
-
-					// at this point we have as many dots as this team has wins.
-					// now, fill up the remainder.
-					var gamesToWin = seriesStatus.series_type+1;
-					var emptyDots = gamesToWin - teams[index].series_wins;
-
-					// flip the direction the empty dots are on, so wins are always
-					// closest to the team name.
-					if(index==0) {
-						for (var o=0; o<emptyDots; o++) {
-							winString = "\u25FB" + winString;
-						}
-					} else {
-						for (var o=0; o<emptyDots; o++) {
-							winString = winString + "\u25FB";
-						}
-					}
-
-					// store it for later.
-					teams[index].wins_string = winString;
-				});
-
-				// move the information into the teams objects for convenience
-				teams[0].series_wins = seriesStatus.teams[teams[0]["team_id"]]
-				teams[1].series_wins = seriesStatus.teams[teams[1]["team_id"]]
-				winston.debug("Series win info: " + teams[0].series_wins + " - " + teams[1].series_wins);
-			} else {
-				teams[0].series_wins = null;
-				teams[1].series_wins = null;
-				teams[0].wins_string = "";
-				teams[1].wins_string = "";
-				winston.debug("No series data available.");
-			}
-
-			// now push the series status into
-
-			var durationString = " " + Math.floor(match.duration/60) + "m";
-
-			if(match.duration%60<10) {
-				durationString += "0" + match.duration%60;
-			} else {
-				durationString += match.duration%60;
-			}
-
-			durationString += "s";
-
-			var league = this.leagues[match.leagueid];
-
-			var tweetString = teams[0].wins_string + " " + teams[0].displayName + " " + teams[0].kills + "\u2014" + teams[1].kills + " " + teams[1].displayName + " " + teams[1].wins_string + "\n";
-			tweetString = tweetString + durationString + " / " +league.name + "   \n";
-
-			if((teams[0].kills + teams[1].kills)==0 || match.duration <= 410) {
-				winston.info("Discarding match with 0 kills and 6 minute duration.");
-				this.removeMatchFromQueue(match);
-				return;
-			}
-
-			// check if an @ sign is the first character. If it is, then add a preceeding period
-			// so it doesn't count as a reply.
-			tweetString = tweetString.trim();
-			if(tweetString[0]=='@') {
-				tweetString = "." + tweetString;
-			}
-
-			// We know we want to append a dotabuff link, and that it will get auto-shortened
-			// to a string of length 20; (see https://dev.twitter.com/docs/api/1/get/help/configuration - this could increase)
-			// so check and see if the content without the url is over the space we have left
-			// for a \n + a t.co link. If it is, then chop away at the league name
-			// which has started getting super long in some situations.
-			// (119 instead of 120 because of the \n character)
-
-			if(tweetString.length > 119) {
-				tweetString = tweetString.substring(0, 119);
-			}
-
-			// now add the link back in.
-			// this is definitely going to push the total over 140, but we count on the fact that
-			// twitter will shorten it automatically for us post-submission. Not 100% sure this is true
-			// but I think it is.
-			tweetString = tweetString + "\nhttp://dotabuff.com/matches/" + matchMetadata.match_id;
-
-			var isBlacklisted = _.contains(this.blacklistedLeagueIds, match.leagueid);
-
-			if(!isBlacklisted) {
-				winston.info("TWEET: " + tweetString);
-				this.tweet(tweetString, matchMetadata);
-				this.email(tweetString, matchMetadata);
-			} else {
-				winston.info("TWEET.ALT: " + tweetString);
-				this.altTweet(tweetString, matchMetadata);
-			}
-
-			// I'm not totally sure why this doesn't delay until we get an ack from
-			// the twitter api. That would probably be smarter. But whatever.
-			// now remove the match_id from matchIdsToTweet
-			winston.info("Removing match id after successful tweet: " + matchMetadata.match_id);
-			this.removeMatchFromQueue(matchMetadata);
-
-			// update the listing if there were series wins.
-			// do this late in the process in case there were errors.
-			if(!_.isNull(teams[0].series_wins)) {
-				this.activeSeriesIds[seriesStatus.series_id] = seriesStatus;
-
-				// cache the series data so it survives a restart.
-				this.saveSeries();
-			}
-			this.cleanupActiveSeries();
+			cb && cb(match, matchMetadata);
 		}, this));
+	},
+
+	processMatchDetails: function(matchDetails, matchMetadata) {
+		var teams = [];
+		_.each(["radiant", "dire"], function(name) {
+			var team = {};
+			_.each(["name", "team_id", "logo", "team_complete"], function(param) {
+				team[param] = matchDetails[name+"_"+param];
+			});
+			team["side"] = name;
+
+			team.kills = 0;
+
+			teams.push(team);
+		});
+
+		// this is a little unusual; instead of counting kills and crediting the
+		// to the team with the kills, we're changing to count DEATHS of the opposite
+		// team and attribute that score to the opposite team. This difference matters
+		// in situations with suicides and neutral denies. This matches the behavior
+		// of the in-game scoreboard, even though it's sort of idiosyncratic.
+		// Thanks to @datdota for pointing out this inconsistency.
+		_.each(matchDetails.players, function(player) {
+			var index = 1;
+			if(player.player_slot >= 128) index = 0;
+
+			teams[index].kills += player.deaths;
+		});
+
+		// Check if we have a twitter handle for this team id.
+		_.each(teams, function(team) {
+			if(team.team_id in team_twitter) {
+				team.name = "@" + team_twitter[team.team_id];
+			} else {
+				winston.info("No twitter handle found for team: " + team.name + " (" + team.team_id + ")");
+			}
+		});
+
+		if(matchDetails.radiant_win) {
+			teams[0].winner = true;
+			teams[1].winner = false;
+
+			teams[0].displayName = "[" + teams[0].name + "]";
+			teams[1].displayName = teams[1].name;
+		} else {
+			teams[0].winner = false;
+			teams[1].winner = true;
+
+			teams[0].displayName = teams[0].name;
+			teams[1].displayName = "[" + teams[1].name + "]";
+		}
+
+		// now, lets update the series_id information.
+		// first, check and see if this series has been seen before.
+
+		if(matchMetadata.series_type > 0) {
+			winston.debug("ACTIVE SERIES: " + matchMetadata.series_id);
+			winston.debug("activeSeriesIds:" + JSON.stringify(this.activeSeriesIds));
+
+			var seriesStatus;
+			if(matchMetadata.series_id in this.activeSeriesIds) {
+				seriesStatus = _.clone(this.activeSeriesIds[matchMetadata.series_id]);
+			} else {
+				seriesStatus = {
+					series_id: matchMetadata.series_id,
+					series_type: matchMetadata.series_type,
+					teams: {},
+					time: new Date().getTime()
+				}
+
+				seriesStatus.teams[teams[0]["team_id"]] = 0;
+				seriesStatus.teams[teams[1]["team_id"]] = 0;
+			}
+
+			// now update the results based on who won
+			var teamId = teams[0]["team_id"];
+
+			if(teams[1].winner) {
+				teamId = teams[1]["team_id"];
+			}
+
+			seriesStatus.teams[teamId] = seriesStatus.teams[teamId]+1;
+			seriesStatus.time = new Date().getTime();
+
+			// construct a string where it has filled in circles for every
+			// win, and empty circles to fill into the total number of games
+			// necessary.
+
+			_.each([0, 1], function(index) {
+				teams[index].series_wins = seriesStatus.teams[teams[index]["team_id"]]
+
+				var winString = "";
+				for(var x=0; x<teams[index].series_wins; x++) {
+					winString = winString + "\u25FC";
+				}
+
+				// at this point we have as many dots as this team has wins.
+				// now, fill up the remainder.
+				var gamesToWin = seriesStatus.series_type+1;
+				var emptyDots = gamesToWin - teams[index].series_wins;
+
+				// flip the direction the empty dots are on, so wins are always
+				// closest to the team name.
+				if(index==0) {
+					for (var o=0; o<emptyDots; o++) {
+						winString = "\u25FB" + winString;
+					}
+				} else {
+					for (var o=0; o<emptyDots; o++) {
+						winString = winString + "\u25FB";
+					}
+				}
+
+				// store it for later.
+				teams[index].wins_string = winString;
+			});
+
+			// move the information into the teams objects for convenience
+			teams[0].series_wins = seriesStatus.teams[teams[0]["team_id"]]
+			teams[1].series_wins = seriesStatus.teams[teams[1]["team_id"]]
+
+			winston.debug("activeSeriesIds POST:" + JSON.stringify(this.activeSeriesIds));
+		} else {
+			teams[0].series_wins = null;
+			teams[1].series_wins = null;
+			teams[0].wins_string = "";
+			teams[1].wins_string = "";
+		}
+
+		// now push the series status into
+
+		var durationString = " " + Math.floor(matchDetails.duration/60) + "m";
+
+		if(matchDetails.duration%60<10) {
+			durationString += "0" + matchDetails.duration%60;
+		} else {
+			durationString += matchDetails.duration%60;
+		}
+
+		durationString += "s";
+
+		var league = this.leagues[matchDetails.leagueid];
+
+		var tweetString = teams[0].wins_string + " " + teams[0].displayName + " " + teams[0].kills + "\u2014" + teams[1].kills + " " + teams[1].displayName + " " + teams[1].wins_string + "\n";
+		tweetString = tweetString + durationString + " / " +league.name + "   \n";
+
+		// check if an @ sign is the first character. If it is, then add a preceeding period
+		// so it doesn't count as a reply.
+		tweetString = tweetString.trim();
+		if(tweetString[0]=='@') {
+			tweetString = "." + tweetString;
+		}
+
+		// We know we want to append a dotabuff link, and that it will get auto-shortened
+		// to a string of length 20; (see https://dev.twitter.com/docs/api/1/get/help/configuration - this could increase)
+		// so check and see if the content without the url is over the space we have left
+		// for a \n + a t.co link. If it is, then chop away at the league name
+		// which has started getting super long in some situations.
+		// (119 instead of 120 because of the \n character)
+
+		if(tweetString.length > 119) {
+			tweetString = tweetString.substring(0, 119);
+		}
+
+		// now add the link back in.
+		// this is definitely going to push the total over 140, but we count on the fact that
+		// twitter will shorten it automatically for us post-submission. Not 100% sure this is true
+		// but I think it is.
+		tweetString = tweetString + "\nhttp://dotabuff.com/matches/" + matchMetadata.match_id;
+
+		var result = {message: tweetString, teams:teams, duration:matchDetails.duration,
+						seriesStatus: seriesStatus};
+
+
+
+		return result;
+	},
+
+	isValidMatch: function(results) {
+		// takes the object returned from processMatchDetails, and returns
+		// true/false depending on whether it's a "real" match.
+		if((results.teams[0].kills + results.teams[1].kills)==0 || results.duration <= 410) {
+			return false;
+		} else if(_.isUndefined(results.teams[0].name) || _.isUndefined(results.teams[1].name)) {
+			return false;
+		} else {
+			return true;
+		}
+	},
+
+	handleFinishedMatchEarly: function(match, matchMetadata) {
+		// this version of handle finished match is called as soon as we get a
+		// result, so we can get a non-delayed version of the results. It does
+		// some of the same things as handleFinishedMatch, but has some slightly
+		// different behaviors.
+		var results = this.processMatchDetails(match, matchMetadata);
+		var isBlacklisted = _.contains(this.blacklistedLeagueIds, match.leagueid);
+
+		if(this.isValidMatch(results) && !isBlacklisted) {
+			winston.info("emailing for match: " + match.match_id);
+			this.email(results.message, matchMetadata);
+		}
+	},
+
+	handleFinishedMatch: function(match, matchMetadata) {
+		var results = this.processMatchDetails(match, matchMetadata);
+
+		// drop out, but mark this match as processed.
+		if(!this.isValidMatch(results)) {
+			this.removeMatchFromQueue(match);
+			return;
+		}
+
+		winston.info(JSON.stringify(results));
+
+		var isBlacklisted = _.contains(this.blacklistedLeagueIds, match.leagueid);
+
+		if(!isBlacklisted) {
+			winston.info("TWEET: " + results.message);
+			this.tweet(results.message, matchMetadata);
+		} else {
+			winston.info("TWEET.ALT: " + results.message);
+			this.altTweet(results.message, matchMetadata);
+		}
+
+		// I'm not totally sure why this doesn't delay until we get an ack from
+		// the twitter api. That would probably be smarter. But whatever.
+		// now remove the match_id from matchIdsToTweet
+		this.removeMatchFromQueue(matchMetadata);
+
+		// update the listing if there were series wins.
+		// do this late in the process in case there were errors.
+		if(!_.isNull(results.teams[0].series_wins)) {
+			this.activeSeriesIds[results.seriesStatus.series_id] = results.seriesStatus;
+			winston.info("In handleFinishedMatch, save series status. Result: " + JSON.stringify(this.activeSeriesIds));
+			// cache the series data so it survives a restart.
+			this.saveSeries();
+		}
+		this.cleanupActiveSeries();
 	},
 
 	cleanupActiveSeries: function() {
@@ -805,8 +869,10 @@ exports.ResultsServer.prototype = {
 	// should really abstract this properly but I'm lazy right now and
 	// don't want to deal with the throttle function and arguments.
 	_altTweet: function(string, match) {
-		if(this.isDemo) return;
-		if(this.isSilent) return;
+		if(this.isDemo || this.isSilent) {
+			this.removeMatchFromQueue(match);
+			return;
+		}
 
 		this.twitterAlt.post('statuses/update', { status: string }, _.bind(function(err, reply) {
 				if (err) {
@@ -823,8 +889,10 @@ exports.ResultsServer.prototype = {
 	},
 
 	_tweet: function(string, match) {
-		if(this.isDemo) return;
-		if(this.isSilent) return;
+		if(this.isDemo || this.isSilent) {
+			this.removeMatchFromQueue(match);
+			return;
+		}
 
 		this.twitter.post('statuses/update', { status: string }, _.bind(function(err, reply) {
 				if (err) {
@@ -875,15 +943,20 @@ exports.ResultsServer.prototype = {
 	},
 
 	removeMatchFromQueue: function(match) {
-		this.matchesToTweet = _.reject(this.matchesToTweet, function(match) {
-			return match.match_id==match.match_id;
+		winston.debug("Removing match id after successful tweet: " + match.match_id);
+
+		this.matchesToTweet = _.reject(this.matchesToTweet, function(m) {
+			return m.match_id==match.match_id;
 		});
+
+		// remove the details cache too to keep it from accumulating.
+		delete this.matchDetailsCache[match.match_id];
 
 		// Make sure it's not in redis either. 99% of the time it won't be, but
 		// we'll just make absolute sure here. It's a cheap operation and it fails
 		// easily.
 		if(this.redis) {
-			winston.info("Trying to remove " + match.match_id + " from delayed_matches.")
+			winston.debug("Trying to remove " + match.match_id + " from delayed_matches.")
 			this.redis.hdel("global:delayed_matches", match.match_id,
 				function(err, reply) {
 					if(err) {
