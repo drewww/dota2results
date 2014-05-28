@@ -41,7 +41,7 @@ exports.teams = {
 	7 : "DKdota2",
 	5 : "invgaming",
 	15 : "LGDgaming",
-	  // : "vici_gaming",
+	726228 : "vici_gaming",
 999689 : "titansesports",
 	80 : "mineski",
 	40 : "TeamVirtusPro",
@@ -50,5 +50,5 @@ exports.teams = {
 	1194118 : "Dota2Relax",
 	886928 : "RevivalDragons",
 	162 : "FlipSid3Tactics",
-	1206475: "NewBeeDota2"
+	1375614: "NewBeeDota2"
 };
