@@ -80,6 +80,8 @@ exports.ResultsServer.prototype = {
 
 	activeLeagueIds: null,
 
+	leagueStreamDelays: null,
+
 	blacklistedLeagueIds: null,
 
 	isDemo: false,
@@ -98,6 +100,9 @@ exports.ResultsServer.prototype = {
 		// maps leagueIds to times we last saw that league
 		// with an active game.
 		this.activeLeagueIds = {};
+
+		// maps league_ids to stream delays, in seconds.
+		this.leagueStreamDelays = {};
 
 		// the match details cache relates match_ids to a full
 		// JSON response from the server. They're cleaned out
@@ -346,18 +351,19 @@ exports.ResultsServer.prototype = {
 				// the email (if appropriate) rather than doing all the other stuff
 				// related to official tweeting.
 
-				// we culd probably check to see if this league_id is blacklisted; if it
+				// we could probably check to see if this league_id is blacklisted; if it
 				// is, then we're not going to email anyway and could skip this load.
 				// this.loadMatchDetails(match, _.bind(this.handleFinishedMatchEarly, this));
 
 				// by default, delay for two minutes.
 				var delayDuration = 1000*120;
 
-				// it seems like the international ticket delays for 5 minutes,
-				// so check for that specific ticket and delay those tweets for longer.
-				// this is hardcoded; check this each year.
-				if(league.leagueid==600) {
-					delayDuration = 1000*60*5;
+				if(league.leagueid in this.leagueStreamDelays) {
+					// this value is in seconds, so multiply by 1000 to get ms.
+					delayDuration = this.leagueStreamDelays[league.leagueid] * 1000;
+					winston.info("Pulling stream delay from cached value: " + delayDuration);
+				} else {
+					winston.info("Stream delay not found in cache; defaulting to 120s");
 				}
 
 				setTimeout(_.bind(function() {
@@ -503,8 +509,27 @@ exports.ResultsServer.prototype = {
 			this.liveGames = res.games;
 			this.lastLiveGamesUpdate = new Date().getTime();
 
-			// winston.info("Found " + this.liveGames.length + " active league games.");
-
+			// liveLeagueGames now reports stream delay properly. This is great,
+			// because we've been guessing it thus far. The problem is there's
+			// not an easy way to link liveLeagueGames with getMatchDetails
+			// which is when we actually care about stream delay. The games when
+			// they're live don't have a match_id, and the lobby_id they DO have
+			// doesn't seem to be represented in the resulting match data.
+			// 
+			// what they do have in common is a league_id, which (it seems plausible)
+			// is going to have a basically static stream delay. The big distinction
+			// is between LAN events with little to no delay and online events which
+			// have delays between 2 minutes and 6 minutes. We're going to assume
+			// that the delay is basically stable for a league, and if it does change
+			// within a league, it's during different stages of a tournament, not
+			// between games. IE a tournament might start online and end lan and the
+			// delay will change between those, but only once and not on a per-game
+			// basis. So, here we're going to just build + maintain a hash of 
+			// league ids to stream delays and update it every time we run this 
+			// query, and check it when we're about to delay a tweet.
+			_.each(this.liveGames, _.bind(function(game) {
+				this.leagueStreamDelays[game.league_id] = game.stream_delay_s;
+			}, this));
 			this.emit("live-games:update");
 		}, this));
 	},
