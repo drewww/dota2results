@@ -50,5 +50,8 @@ exports.teams = {
 	1194118 : "Dota2Relax",
 	886928 : "RevivalDragons",
 	162 : "FlipSid3Tactics",
-	1375614: "NewBeeDota2"
+	1375614: "NewBeeDota2",
+
+	// some person on twitter requested this for their team. whatevs.
+	1494951 : "MaxFloPlaY"
 };
