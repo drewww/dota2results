@@ -362,6 +362,8 @@ exports.ResultsServer.prototype = {
 					// this value is in seconds, so multiply by 1000 to get ms.
 					delayDuration = this.leagueStreamDelays[league.leagueid] * 1000;
 					winston.info("Pulling stream delay from cached value: " + delayDuration);
+				} else {
+					winston.info("Stream delay not found in cache; defaulting to 120s");
 				}
 
 				setTimeout(_.bind(function() {
@@ -528,10 +530,6 @@ exports.ResultsServer.prototype = {
 			_.each(this.liveGames, _.bind(function(game) {
 				this.leagueStreamDelays[game.league_id] = game.stream_delay_s;
 			}, this));
-
-			winston.info("stream delays by league: " + JSON.stringify(this.leagueStreamDelays));
-			// winston.info("Found " + this.liveGames.length + " active league games.");
-
 			this.emit("live-games:update");
 		}, this));
 	},
