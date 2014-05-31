@@ -25,7 +25,8 @@
     "dazzle": "*",
     "underscore": "*",
     "redis" : "*",
-    "mandrill-api" : "1.x"
+    "mandrill-api" : "1.x",
+    "canvas" : "~1.1"
   },
   "license": "GPL v2",
   "engines": {
