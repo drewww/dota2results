@@ -7,7 +7,8 @@ var request = require('request'),
 	fs = require('fs'),
 	twit = require('twit'),
 	mandrill = require('mandrill-api/mandrill'),
-	team_twitter = require('./twitter_handles.js').teams;
+	team_twitter = require('./twitter_handles.js').teams,
+	GameStates = require('./lib/gamestate.js');
 
 
 
@@ -94,6 +95,8 @@ exports.ResultsServer.prototype = {
 
 	matchDetailsCache: null,
 
+	states: null,
+
 	init: function(isDemo, isSilent) {
 		winston.info("INIT ResultsServer");
 
@@ -168,6 +171,11 @@ exports.ResultsServer.prototype = {
 				winston.info("Connected to redis!");
 				this.loadSeries();
 				this.loadDelayedMatches();
+
+				// eventually this will also trigger game states to load
+				// from redis.
+				this.states = new GameStates(this.redis);
+
 			}, this));
 		} else {
 			winston.warn("Redis connection information not available.");
@@ -269,13 +277,21 @@ exports.ResultsServer.prototype = {
 					this.loadMatchDetails(match, _.bind(this.handleFinishedMatch, this));
 				}, this));
 			}
+
+			// now we're going to dig into the snapshots in this list to process their
+			// snapshots. Probably we're going to want to mess with the frequencies of
+			// this part of the processing relative to the other pieces, but for now
+			// we'll let them all line up.
+			_.each(this.liveGames, _.bind(function(game) {
+				this.states.processSnapshot(game);
+			}, this));
 		}, this));
 
 		if(Object.keys(this.leagues).length==0) {
 			this.updateLeagueListing();
 		}
 
-		var duration = 60*1000;
+		var duration = 40*1000;
 		if(this.isDemo) {
 			// we want to pick a random league that's not blacklisted
 			// and tweet from it occasionally.
