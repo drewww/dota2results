@@ -285,13 +285,19 @@ exports.ResultsServer.prototype = {
 			_.each(this.liveGames, _.bind(function(game) {
 				this.states.processSnapshot(game);
 			}, this));
+
+			// triggers some cleanup at the end of a set of snapshots.
+			this.states.finish();
+
 		}, this));
 
 		if(Object.keys(this.leagues).length==0) {
 			this.updateLeagueListing();
 		}
 
-		var duration = 40*1000;
+		// this is artificially low for testing purposes.
+		// in production, probably set this high again.
+		var duration = 30*1000;
 		if(this.isDemo) {
 			// we want to pick a random league that's not blacklisted
 			// and tweet from it occasionally.
