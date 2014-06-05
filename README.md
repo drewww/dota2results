@@ -27,7 +27,7 @@ To run this locally, you'll need a valid Steam API key. If you want to post to T
 Contribution
 ------------
 
-If you're interested in contributing, I can always use help keeping track of Twitter handles for teams. You can find the instructions for doing that in `twitter_handles.js`. 
+If you're interested in contributing, I can always use help keeping track of Twitter handles for teams. You can find the instructions for doing that in `lib/twitter_handles.js`. 
 
 Future Directions
 -----------------

@@ -7,7 +7,7 @@ var request = require('request'),
 	fs = require('fs'),
 	twit = require('twit'),
 	mandrill = require('mandrill-api/mandrill'),
-	team_twitter = require('./twitter_handles.js').teams,
+	team_twitter = require('./lib/twitter_handles.js').teams,
 	GameStates = require('./lib/gamestate.js');
 
 
