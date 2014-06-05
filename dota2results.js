@@ -1,6 +1,7 @@
 var request = require('request'),
 	winston = require('winston'),
 	querystring = require('querystring'),
+	boxscores = require('./lib/boxscores.js'),
 	_ = require('underscore')._,
 	dazzle = require('dazzle'),
 	EventEmitter = require('events').EventEmitter,
@@ -456,7 +457,7 @@ exports.ResultsServer.prototype = {
 		if(this.redis) {
 			this.redis.get("global:series", _.bind(function(err, reply) {
 				if(!err) {
-					this.activeSeriesIds = JSON.parse(reply);
+					this.activeSeriesIds = JSON.parse(reply ? reply : "{}");
 					winston.info("Loading series from cache: " + JSON.stringify(this.activeSeriesIds));
 				} else {
 					winston.warn("Error loading series from cache: " + err + "; defaulting to empty.");
@@ -857,6 +858,16 @@ exports.ResultsServer.prototype = {
 		winston.info(JSON.stringify(results));
 
 		var isBlacklisted = _.contains(this.blacklistedLeagueIds, match.leagueid);
+
+		// okay, now lets look up the detailed lobby info.
+		var lobbyInfo = this.states.getLobbyByTeamAndLeague(
+			[results.teams[0].team_id, results.teams[1].team_id],
+			match.leagueid);
+
+		if(lobbyInfo) {
+			winston.info("found a lobby: " + lobbyInfo + " trying to generate");
+			boxscores.generate(lobbyInfo, results);
+		}
 
 		if(!isBlacklisted) {
 			winston.info("TWEET: " + results.message);
