@@ -864,9 +864,13 @@ exports.ResultsServer.prototype = {
 			[results.teams[0].team_id, results.teams[1].team_id],
 			match.leagueid);
 
+		// write out the match data anyway so we can manually build files if we have to
+		fs.writeFileSync("games/match_" + match.match_id + ".json", JSON.stringify(results));
+
 		if(lobbyInfo) {
 			winston.info("found a lobby: " + lobbyInfo + " trying to generate");
 			boxscores.generate(lobbyInfo, results);
+			this.states.removeLobby(lobbyInfo.lastSnapshot.lobby_id);
 		}
 
 		if(!isBlacklisted) {
