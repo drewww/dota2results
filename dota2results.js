@@ -880,6 +880,11 @@ exports.ResultsServer.prototype = {
 			// plausibly feel like we've captured the whole thing and it's worth
 			// an image.
 			winston.info("box scores generated: " + success);
+
+			// clean out the lobby data regardless; if we successfully generated,
+			// then we don't need it anymore. If we didn't, it was sort of bad
+			// data to begin with so clean it out. We'll rely on redis expiring
+			// the data on bot restart.
 			this.states.removeLobby(lobbyInfo.lastSnapshot.lobby_id);
 		}
 
