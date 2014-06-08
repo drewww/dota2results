@@ -871,7 +871,15 @@ exports.ResultsServer.prototype = {
 
 		if(lobbyInfo) {
 			winston.info("found a lobby: " + lobbyInfo + " trying to generate");
-			boxscores.generate(lobbyInfo, results);
+			var success = boxscores.generate(lobbyInfo, results);
+
+			// if boxscores fails to generate, it represents some sort of major
+			// missing data like no tower data or no gold history data.
+			// (over time I'll make this more tight; expect at least one gold
+			// event every 2-3 minutes for the duration of the game so we can 
+			// plausibly feel like we've captured the whole thing and it's worth
+			// an image.
+			winston.info("box scores generated: " + success);
 			this.states.removeLobby(lobbyInfo.lastSnapshot.lobby_id);
 		}
 
