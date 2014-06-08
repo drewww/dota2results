@@ -8,6 +8,9 @@ var request = require('request'),
 	fs = require('fs'),
 	twit = require('twit'),
 	mandrill = require('mandrill-api/mandrill'),
+
+	twitter_update_with_media = require('./lib/twitter_update_with_media.js');
+
 	team_twitter = require('./lib/twitter_handles.js').teams,
 	GameStates = require('./lib/gamestate.js');
 
@@ -196,6 +199,13 @@ exports.ResultsServer.prototype = {
 		});
 
 		this.twitterAlt = new twit({
+		    consumer_key:         process.env.TWITTER_ALT_CONSUMER_KEY
+		  , consumer_secret:      process.env.TWITTER_ALT_CONSUMER_SECRET
+		  , access_token:         process.env.TWITTER_ALT_ACCESS_TOKEN
+		  , access_token_secret:  process.env.TWITTER_ALT_ACCESS_TOKEN_SECRET
+		});
+
+		this.twitterAltMedia = new twitter_update_with_media({
 		    consumer_key:         process.env.TWITTER_ALT_CONSUMER_KEY
 		  , consumer_secret:      process.env.TWITTER_ALT_CONSUMER_SECRET
 		  , access_token:         process.env.TWITTER_ALT_ACCESS_TOKEN
@@ -871,29 +881,38 @@ exports.ResultsServer.prototype = {
 
 		if(lobbyInfo) {
 			winston.info("found a lobby: " + lobbyInfo + " trying to generate");
-			var success = boxscores.generate(lobbyInfo, results);
+			var success = boxscores.generate(lobbyInfo, results, _.bind(function(filename) {
+				// if boxscores fails to generate, it represents some sort of major
+				// missing data like no tower data or no gold history data.
+				// (over time I'll make this more tight; expect at least one gold
+				// event every 2-3 minutes for the duration of the game so we can 
+				// plausibly feel like we've captured the whole thing and it's worth
+				// an image.
+				winston.info("box scores generated: " + success);
 
-			// if boxscores fails to generate, it represents some sort of major
-			// missing data like no tower data or no gold history data.
-			// (over time I'll make this more tight; expect at least one gold
-			// event every 2-3 minutes for the duration of the game so we can 
-			// plausibly feel like we've captured the whole thing and it's worth
-			// an image.
-			winston.info("box scores generated: " + success);
+				// clean out the lobby data regardless; if we successfully generated,
+				// then we don't need it anymore. If we didn't, it was sort of bad
+				// data to begin with so clean it out. We'll rely on redis expiring
+				// the data on bot restart.
+				this.states.removeLobby(lobbyInfo.lastSnapshot.lobby_id);
 
-			// clean out the lobby data regardless; if we successfully generated,
-			// then we don't need it anymore. If we didn't, it was sort of bad
-			// data to begin with so clean it out. We'll rely on redis expiring
-			// the data on bot restart.
-			this.states.removeLobby(lobbyInfo.lastSnapshot.lobby_id);
-		}
-
-		if(!isBlacklisted) {
-			winston.info("TWEET: " + results.message);
-			this.tweet(results.message, matchMetadata);
+				// now do a media tweet. eventually this will ahve both varieties,
+				// but for now will be just one.
+				winston.info("about to tweet")
+				this.twitterAltMedia.post(results.message.slice(0, 80) + " ", "images/" + filename, function(err, response, body) {
+					winston.info("post twitter alt media: " + err + "; " + response.statusCode + " " + body);
+					// winston.info("post twitter alt media: " + err + "; " + JSON.stringify(response));
+				});	
+			}, this));
 		} else {
-			winston.info("TWEET.ALT: " + results.message);
-			this.altTweet(results.message, matchMetadata);
+			// do non-media tweets
+			if(!isBlacklisted) {
+				winston.info("TWEET: " + results.message);
+				this.tweet(results.message, matchMetadata);
+			} else {
+				winston.info("TWEET.ALT: " + results.message);
+				this.altTweet(results.message, matchMetadata);
+			}			
 		}
 
 		// I'm not totally sure why this doesn't delay until we get an ack from
@@ -952,17 +971,17 @@ exports.ResultsServer.prototype = {
 		}
 
 		this.twitterAlt.post('statuses/update', { status: string }, _.bind(function(err, reply) {
-				if (err) {
-	  				winston.error("Error posting tweet: " + err);
+			if (err) {
+					winston.error("Error posting tweet: " + err);
 
-	  				if(err.message.indexOf('duplicate')!=-1 || err.message.indexOf('update limit')!=-1) {
-	  					winston.info("Error posting, duplicate or over limit - drop.");
-	  					this.removeMatchFromQueue(match);
-	  				}
-				} else {
-	  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
-				}
-  		}, this));
+					if(err.message.indexOf('duplicate')!=-1 || err.message.indexOf('update limit')!=-1) {
+						winston.info("Error posting, duplicate or over limit - drop.");
+						this.removeMatchFromQueue(match);
+					}
+			} else {
+					winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
+			}
+		}, this));
 	},
 
 	_tweet: function(string, match) {
