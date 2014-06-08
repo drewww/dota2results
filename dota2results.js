@@ -205,11 +205,13 @@ exports.ResultsServer.prototype = {
 		  , access_token_secret:  process.env.TWITTER_ALT_ACCESS_TOKEN_SECRET
 		});
 
+		// note that this one has slightly different token names than
+		// the twit library (which doesn't support media)
 		this.twitterAltMedia = new twitter_update_with_media({
 		    consumer_key:         process.env.TWITTER_ALT_CONSUMER_KEY
 		  , consumer_secret:      process.env.TWITTER_ALT_CONSUMER_SECRET
-		  , access_token:         process.env.TWITTER_ALT_ACCESS_TOKEN
-		  , access_token_secret:  process.env.TWITTER_ALT_ACCESS_TOKEN_SECRET
+		  , token:         process.env.TWITTER_ALT_ACCESS_TOKEN
+		  , token_secret:  process.env.TWITTER_ALT_ACCESS_TOKEN_SECRET
 		});
 
 		this.on("live-games:update", _.bind(function() {
