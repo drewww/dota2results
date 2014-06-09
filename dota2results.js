@@ -901,7 +901,7 @@ exports.ResultsServer.prototype = {
 				// now do a media tweet. eventually this will ahve both varieties,
 				// but for now will be just one.
 				winston.info("about to tweet")
-				this.twitterAltMedia.post(results.message.slice(0, 80) + " ", "images/" + filename, function(err, response, body) {
+				this.twitterAltMedia.post(results.message + " ", "/tmp/" + filename, function(err, response, body) {
 					winston.info("post twitter alt media: " + err + "; " + response.statusCode + " " + body);
 					// winston.info("post twitter alt media: " + err + "; " + JSON.stringify(response));
 				});	
