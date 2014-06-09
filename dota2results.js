@@ -214,6 +214,13 @@ exports.ResultsServer.prototype = {
 		  , token_secret:  process.env.TWITTER_ALT_ACCESS_TOKEN_SECRET
 		});
 
+		this.twitterMedia = new twitter_update_with_media({
+		    consumer_key:         process.env.TWITTER_CONSUMER_KEY
+		  , consumer_secret:      process.env.TWITTER_CONSUMER_SECRET
+		  , token:         process.env.TWITTER_ACCESS_TOKEN
+		  , token_secret:  process.env.TWITTER_ACCESS_TOKEN_SECRET
+		});
+
 		this.on("live-games:update", _.bind(function() {
 			var leagues = this.getLeaguesWithLiveGames();
 
@@ -900,11 +907,34 @@ exports.ResultsServer.prototype = {
 
 				// now do a media tweet. eventually this will ahve both varieties,
 				// but for now will be just one.
-				winston.info("about to tweet")
-				this.twitterAltMedia.post(results.message + " ", "/tmp/" + filename, function(err, response, body) {
-					winston.info("post twitter alt media: " + err + "; " + response.statusCode + " " + body);
-					// winston.info("post twitter alt media: " + err + "; " + JSON.stringify(response));
-				});	
+				winston.info("about to tweet");
+
+				if(!isBlacklisted) {
+
+					if(isSilent || isDemo) {
+						winston.info("Skipping media premiuer tweet");
+					} else {
+						this.twitterMedia.post(results.message, "/tmp/" + filename, function(err, response, body) {
+							try {
+								winston.info("post twitter media: " + err + "; " + response.statusCode);
+							} catch (e) {
+								winston.warn("exception posting twitter media response (minor)");
+							}
+						});	
+					}
+				} else {
+					if(isSilent || isDemo) {
+						winston.info("Skippng media alt tweet");
+					} else {
+						this.twitterAltMedia.post(results.message, "/tmp/" + filename, function(err, response, body) {
+							try {
+								winston.info("post twitter alt media: " + err + "; " + response.statusCode);
+							} catch (e) {
+								winston.warn("exception posting twitter alt media response (minor)");
+							}
+						});	
+					}
+				}
 			}, this));
 		} else {
 			// do non-media tweets
