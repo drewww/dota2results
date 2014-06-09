@@ -910,7 +910,6 @@ exports.ResultsServer.prototype = {
 				winston.info("about to tweet");
 
 				if(!isBlacklisted) {
-
 					if(isSilent || isDemo) {
 						winston.info("Skipping media premiuer tweet");
 					} else {
@@ -936,6 +935,17 @@ exports.ResultsServer.prototype = {
 					}
 				}
 			}, this));
+
+			if(!success) {
+				// we need to tweet normally, without an image.
+				if(!isBlacklisted) {
+					winston.info("TWEET: " + results.message);
+					this.tweet(results.message, matchMetadata);
+				} else {
+					winston.info("TWEET.ALT: " + results.message);
+					this.altTweet(results.message, matchMetadata);
+				}
+			}
 		} else {
 			// do non-media tweets
 			if(!isBlacklisted) {
