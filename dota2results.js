@@ -916,6 +916,11 @@ exports.ResultsServer.prototype = {
 						this.twitterMedia.post(results.message, "/tmp/" + filename, function(err, response, body) {
 							try {
 								winston.info("post twitter media: " + err + "; " + response.statusCode);
+								
+								if(response.statusCode != 200) {
+									winston.err(body);
+								}
+
 							} catch (e) {
 								winston.warn("exception posting twitter media response (minor)");
 							}
@@ -928,6 +933,11 @@ exports.ResultsServer.prototype = {
 						this.twitterAltMedia.post(results.message, "/tmp/" + filename, function(err, response, body) {
 							try {
 								winston.info("post twitter alt media: " + err + "; " + response.statusCode);
+								
+								if(response.statusCode != 200) {
+									winston.err(body);
+								}
+
 							} catch (e) {
 								winston.warn("exception posting twitter alt media response (minor)");
 							}
