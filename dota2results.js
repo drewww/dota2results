@@ -827,16 +827,32 @@ exports.ResultsServer.prototype = {
 			tweetString = tweetString.substring(0, 119);
 		}
 
+		var baseString = tweetString;
 		// now add the link back in.
 		// this is definitely going to push the total over 140, but we count on the fact that
 		// twitter will shorten it automatically for us post-submission. Not 100% sure this is true
 		// but I think it is.
 		tweetString = tweetString + "\nhttp://dotabuff.com/matches/" + matchMetadata.match_id;
 
+		// we're going to prepare an extra-short tweet string too, in case
+		// there's a picture to include. there are two cases here:
+		// 1. the resulting tweet in tweetString has room for an extra 20 characters
+		//	  for the twitter image link.
+		// 2. the resulting tweet does not have room. 
+		//		a. in this case, drop the dotabuff link and tweet the result, since
+		//		   we know that that's the same length.
+
+		var shortMessage;
+		if(tweetString.length > 119) {
+			// use the pre-dotabuff-appended link.
+			shortMessage = baseString;
+		} else {
+			// otherwise, we're fine; shortMessage can be the same.
+			shortMessage = tweetString;
+		}
+
 		var result = {message: tweetString, teams:teams, duration:matchDetails.duration,
-						seriesStatus: seriesStatus};
-
-
+						seriesStatus: seriesStatus, shortMessage: shortMessage};
 
 		return result;
 	},
@@ -913,7 +929,9 @@ exports.ResultsServer.prototype = {
 					if(isSilent || isDemo) {
 						winston.info("Skipping media premiuer tweet");
 					} else {
-						this.twitterMedia.post(results.message, "/tmp/" + filename, function(err, response, body) {
+						// NB that we're using results.shortMessage here, which should
+						// always have room for another 20 characters to tweet.
+						this.twitterMedia.post(results.shortMessage, "/tmp/" + filename, function(err, response, body) {
 							try {
 								winston.info("post twitter media: " + err + "; " + response.statusCode);
 								
@@ -928,9 +946,11 @@ exports.ResultsServer.prototype = {
 					}
 				} else {
 					if(isSilent || isDemo) {
-						winston.info("Skippng media alt tweet");
+						winston.info("Skipping media alt tweet");
 					} else {
-						this.twitterAltMedia.post(results.message, "/tmp/" + filename, function(err, response, body) {
+						// NB that we're using results.shortMessage here, which should
+						// always have room for another 20 characters to tweet.
+						this.twitterAltMedia.post(results.shortMessage, "/tmp/" + filename, function(err, response, body) {
 							try {
 								winston.info("post twitter alt media: " + err + "; " + response.statusCode);
 								
