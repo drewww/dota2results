@@ -850,6 +850,15 @@ exports.ResultsServer.prototype = {
 		if(tweetString.length > 119) {
 			// use the pre-dotabuff-appended link.
 			shortMessage = baseString;
+
+			// it seems like pic links are longer than normal links,
+			// so cut off some extra text just in case. Not totally sure
+			// about this number, can't find a reliable reference. Links
+			// should be 20 max, but I've seen references to 26 chars max
+			// for image links to edging on the careful side.
+			if(shortMessage.length > 112) {
+				shortMessage = shortMessage.substring(0, 112);
+			}
 		} else {
 			// otherwise, we're fine; shortMessage can be the same.
 			shortMessage = tweetString;
