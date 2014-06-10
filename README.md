@@ -19,7 +19,7 @@ This turns out to be a somewhat more complicated process than you might expect, 
 There is a bunch of added complexity around delaying the tweets so they align with stream delays, keeping track of the series status (the API only notes that a game is part of a series, but doesn't give you the current state of the series, eg 1-1 in a bo5, and other details. There are also some tricky bits around restarting the bot (which happens whenever I deploy a new version) without losing games that were in-the-pipeline for being tweeted. In-line comments are pretty decent at providing context.
 
 Boxscores
-=========
+---------
 
 The boxscore image generating system is a whole other situation. As of June 2014, Valve added real-time updates to GetLiveLeagueGames method. For each game, up-to-the-minute (sort of) scoreboard information is available, including per-player item loadouts, GPM/XMP, kill score, tower information, etc. There are two caveats:
 
