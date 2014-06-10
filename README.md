@@ -18,6 +18,32 @@ This turns out to be a somewhat more complicated process than you might expect, 
 
 There is a bunch of added complexity around delaying the tweets so they align with stream delays, keeping track of the series status (the API only notes that a game is part of a series, but doesn't give you the current state of the series, eg 1-1 in a bo5, and other details. There are also some tricky bits around restarting the bot (which happens whenever I deploy a new version) without losing games that were in-the-pipeline for being tweeted. In-line comments are pretty decent at providing context.
 
+Boxscores
+=========
+
+The boxscore image generating system is a whole other situation. As of June 2014, Valve added real-time updates to GetLiveLeagueGames method. For each game, up-to-the-minute (sort of) scoreboard information is available, including per-player item loadouts, GPM/XMP, kill score, tower information, etc. There are two caveats:
+
+ * The data is not available historically. The request gives you the latest data available, but older snapshots are not available anywhere as far as I can see.
+ * The API servers seem to only get updates from the game servers every 60-120 seconds. So the data we're getting is "real time" in a certain sense, but pretty low temporal resolution.
+
+To deal with these issues, there is a major new module, `lib/gamestate.js`, which manages the details of tracking status-over-time of all open league games. The main `dota2results.js` script calls GetLiveLeagueGames every 20 or so seconds and sends the resulting snapshots of each game over to a GameStateTracker object for processing. The GameStateTracker has three major functions:
+
+ 1. Ignore duplicate snapshots (we generally see the same snapshot 4-6 times before we get a genuinely new one)
+ 2. Generate total gold differential data. In this version, this is a net income differential that is calculated by multiplying the per-player GPM rates by the game time and subtracting the team totals from each other. Future versions might instead use a net worth formula that sums up item values + gold on hand to get actual value to better account for buybacks + lost/sold items. But given that the in-game chart still uses the former method (afaict) we'll stick with that one for now.
+ 3. Detect towers falling. Each snapshot includes a bit mask that encodes tower states. Extract diffs in these masks to determine which towers fell and who to attribute them to, isolating these events into a single list of towers-that-fell. 
+
+There are some big gaps in what is available from the GetLiveLeagueGames call.
+
+ * Barracks and ancient status is not reported. This is really annoying, and limits our ability to make the best visualizations.
+ * The game winner is not available in a formal way. We can detect lobbies closing because they stop getting returned by GetLiveLeagueGames and we could maybe infer the winner most of the time, but it's not reported formally.
+ * Gold data is not reported directly and is inferred by GPM information.
+ * Kill data as reported by the final scoreboard doesn't seem to match kill data reported by GetMatchDetails.
+ * The time of the final snapshot is usually substantially lower than the time reported in GetMatchDetails.
+
+This data is accumulated over time. When the normal game-end detection logic from the primary `dota2results.js` logic identifies that a game has finished, it looks up GameStates that seem to match the GetMatchDetails information, relying on league_id and team_id. Merging the MatchDetails object with the accumulated GameState object gives us enough data to make a good visualization.
+
+The visualization process is handled by `boxscores.js`. Most of the work here is in the design, the actual code is a pretty straightforward translation of the target design into node-canvas style code that can generate an image. The `generate()` function takes a MatchDetails object and a GameState object and combines them to create an appropriage image. This function draws on cached images of heroes. It doesn't have any major unusual dependencies, it's just a lot of detailed image work.
+
 
 Setup
 -----
