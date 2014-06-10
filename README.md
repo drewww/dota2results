@@ -39,8 +39,10 @@ There are some big gaps in what is available from the GetLiveLeagueGames call.
  * Gold data is not reported directly and is inferred by GPM information.
  * Kill data as reported by the final scoreboard doesn't seem to match kill data reported by GetMatchDetails.
  * The time of the final snapshot is usually substantially lower than the time reported in GetMatchDetails.
+ * Series-oriented data is not available.
+ * Games are organized by lobby_id, which is a transient id that is separate from the more enduring match_id. 
 
-This data is accumulated over time. When the normal game-end detection logic from the primary `dota2results.js` logic identifies that a game has finished, it looks up GameStates that seem to match the GetMatchDetails information, relying on league_id and team_id. Merging the MatchDetails object with the accumulated GameState object gives us enough data to make a good visualization.
+This data is accumulated over time. When the normal game-end detection system from the primary `dota2results.js` logic identifies that a game has finished, it looks up GameStates that seem to match the GetMatchDetails information, relying on league_id and team_id. Merging the MatchDetails object with the accumulated GameState object gives us enough data to make a good visualization.
 
 The visualization process is handled by `boxscores.js`. Most of the work here is in the design, the actual code is a pretty straightforward translation of the target design into node-canvas style code that can generate an image. The `generate()` function takes a MatchDetails object and a GameState object and combines them to create an appropriage image. This function draws on cached images of heroes. It doesn't have any major unusual dependencies, it's just a lot of detailed image work.
 
