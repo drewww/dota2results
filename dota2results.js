@@ -940,7 +940,7 @@ exports.ResultsServer.prototype = {
 								winston.info("post twitter media: " + err + "; " + response.statusCode);
 								
 								if(response.statusCode != 200) {
-									winston.err(body);
+									winston.error(body);
 								}
 
 							} catch (e) {
@@ -959,7 +959,7 @@ exports.ResultsServer.prototype = {
 								winston.info("post twitter alt media: " + err + "; " + response.statusCode);
 								
 								if(response.statusCode != 200) {
-									winston.err(body);
+									winston.error(body);
 								}
 
 							} catch (e) {
