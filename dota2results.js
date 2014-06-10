@@ -639,9 +639,13 @@ exports.ResultsServer.prototype = {
 		// check to see if we have a cached result for this match.
 		winston.info("contents of matchDetailsCache: " + JSON.stringify(Object.keys(this.matchDetailsCache)));
 
-		if(matchMetadata.match_id in this.matchDetailsCache) {
+		// check if we have a cached result for this match, and if we do return it.
+		// also make sure the result isn't undefined - this somehow happens sometimes.
+		if(matchMetadata.match_id in this.matchDetailsCache &&
+			!_.isUndefined(this.matchDetailsCache[matchMetadata.match_id])) {
 			// return that result.
 			var match = this.matchDetailsCache[matchMetadata.match_id];
+
 			winston.info("Loading match metadata from cache from earlier request.");
 			cb && cb(match, matchMetadata);
 
