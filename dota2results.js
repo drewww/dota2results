@@ -1,13 +1,18 @@
 var request = require('request'),
 	winston = require('winston'),
 	querystring = require('querystring'),
+	boxscores = require('./lib/boxscores.js'),
 	_ = require('underscore')._,
 	dazzle = require('dazzle'),
 	EventEmitter = require('events').EventEmitter,
 	fs = require('fs'),
 	twit = require('twit'),
 	mandrill = require('mandrill-api/mandrill'),
-	team_twitter = require('./twitter_handles.js').teams;
+
+	twitter_update_with_media = require('./lib/twitter_update_with_media.js');
+
+	team_twitter = require('./lib/twitter_handles.js').teams,
+	GameStates = require('./lib/gamestate.js');
 
 
 
@@ -94,6 +99,8 @@ exports.ResultsServer.prototype = {
 
 	matchDetailsCache: null,
 
+	states: null,
+
 	init: function(isDemo, isSilent) {
 		winston.info("INIT ResultsServer");
 
@@ -168,6 +175,11 @@ exports.ResultsServer.prototype = {
 				winston.info("Connected to redis!");
 				this.loadSeries();
 				this.loadDelayedMatches();
+
+				// eventually this will also trigger game states to load
+				// from redis.
+				this.states = new GameStates(this.redis);
+
 			}, this));
 		} else {
 			winston.warn("Redis connection information not available.");
@@ -191,6 +203,22 @@ exports.ResultsServer.prototype = {
 		  , consumer_secret:      process.env.TWITTER_ALT_CONSUMER_SECRET
 		  , access_token:         process.env.TWITTER_ALT_ACCESS_TOKEN
 		  , access_token_secret:  process.env.TWITTER_ALT_ACCESS_TOKEN_SECRET
+		});
+
+		// note that this one has slightly different token names than
+		// the twit library (which doesn't support media)
+		this.twitterAltMedia = new twitter_update_with_media({
+		    consumer_key:         process.env.TWITTER_ALT_CONSUMER_KEY
+		  , consumer_secret:      process.env.TWITTER_ALT_CONSUMER_SECRET
+		  , token:         process.env.TWITTER_ALT_ACCESS_TOKEN
+		  , token_secret:  process.env.TWITTER_ALT_ACCESS_TOKEN_SECRET
+		});
+
+		this.twitterMedia = new twitter_update_with_media({
+		    consumer_key:         process.env.TWITTER_CONSUMER_KEY
+		  , consumer_secret:      process.env.TWITTER_CONSUMER_SECRET
+		  , token:         process.env.TWITTER_ACCESS_TOKEN
+		  , token_secret:  process.env.TWITTER_ACCESS_TOKEN_SECRET
 		});
 
 		this.on("live-games:update", _.bind(function() {
@@ -269,13 +297,27 @@ exports.ResultsServer.prototype = {
 					this.loadMatchDetails(match, _.bind(this.handleFinishedMatch, this));
 				}, this));
 			}
+
+			// now we're going to dig into the snapshots in this list to process their
+			// snapshots. Probably we're going to want to mess with the frequencies of
+			// this part of the processing relative to the other pieces, but for now
+			// we'll let them all line up.
+			_.each(this.liveGames, _.bind(function(game) {
+				this.states.processSnapshot(game);
+			}, this));
+
+			// triggers some cleanup at the end of a set of snapshots.
+			this.states.finish();
+
 		}, this));
 
 		if(Object.keys(this.leagues).length==0) {
 			this.updateLeagueListing();
 		}
 
-		var duration = 60*1000;
+		// this is artificially low for testing purposes.
+		// in production, probably set this high again.
+		var duration = 30*1000;
 		if(this.isDemo) {
 			// we want to pick a random league that's not blacklisted
 			// and tweet from it occasionally.
@@ -434,7 +476,7 @@ exports.ResultsServer.prototype = {
 		if(this.redis) {
 			this.redis.get("global:series", _.bind(function(err, reply) {
 				if(!err) {
-					this.activeSeriesIds = JSON.parse(reply);
+					this.activeSeriesIds = JSON.parse(reply ? reply : "{}");
 					winston.info("Loading series from cache: " + JSON.stringify(this.activeSeriesIds));
 				} else {
 					winston.warn("Error loading series from cache: " + err + "; defaulting to empty.");
@@ -597,9 +639,13 @@ exports.ResultsServer.prototype = {
 		// check to see if we have a cached result for this match.
 		winston.info("contents of matchDetailsCache: " + JSON.stringify(Object.keys(this.matchDetailsCache)));
 
-		if(matchMetadata.match_id in this.matchDetailsCache) {
+		// check if we have a cached result for this match, and if we do return it.
+		// also make sure the result isn't undefined - this somehow happens sometimes.
+		if(matchMetadata.match_id in this.matchDetailsCache &&
+			!_.isUndefined(this.matchDetailsCache[matchMetadata.match_id])) {
 			// return that result.
 			var match = this.matchDetailsCache[matchMetadata.match_id];
+
 			winston.info("Loading match metadata from cache from earlier request.");
 			cb && cb(match, matchMetadata);
 
@@ -622,6 +668,8 @@ exports.ResultsServer.prototype = {
 	},
 
 	processMatchDetails: function(matchDetails, matchMetadata) {
+		winston.info("matchDetails: " + JSON.stringify(matchDetails));
+		winston.info("matchMetadata: " + JSON.stringify(matchMetadata));
 		var teams = [];
 		_.each(["radiant", "dire"], function(name) {
 			var team = {};
@@ -783,16 +831,41 @@ exports.ResultsServer.prototype = {
 			tweetString = tweetString.substring(0, 119);
 		}
 
+		var baseString = tweetString;
 		// now add the link back in.
 		// this is definitely going to push the total over 140, but we count on the fact that
 		// twitter will shorten it automatically for us post-submission. Not 100% sure this is true
 		// but I think it is.
 		tweetString = tweetString + "\nhttp://dotabuff.com/matches/" + matchMetadata.match_id;
 
+		// we're going to prepare an extra-short tweet string too, in case
+		// there's a picture to include. there are two cases here:
+		// 1. the resulting tweet in tweetString has room for an extra 20 characters
+		//	  for the twitter image link.
+		// 2. the resulting tweet does not have room. 
+		//		a. in this case, drop the dotabuff link and tweet the result, since
+		//		   we know that that's the same length.
+
+		var shortMessage;
+		if(tweetString.length > 119) {
+			// use the pre-dotabuff-appended link.
+			shortMessage = baseString;
+
+			// it seems like pic links are longer than normal links,
+			// so cut off some extra text just in case. Not totally sure
+			// about this number, can't find a reliable reference. Links
+			// should be 20 max, but I've seen references to 26 chars max
+			// for image links to edging on the careful side.
+			if(shortMessage.length > 112) {
+				shortMessage = shortMessage.substring(0, 112);
+			}
+		} else {
+			// otherwise, we're fine; shortMessage can be the same.
+			shortMessage = tweetString;
+		}
+
 		var result = {message: tweetString, teams:teams, duration:matchDetails.duration,
-						seriesStatus: seriesStatus};
-
-
+						seriesStatus: seriesStatus, shortMessage: shortMessage};
 
 		return result;
 	},
@@ -836,12 +909,95 @@ exports.ResultsServer.prototype = {
 
 		var isBlacklisted = _.contains(this.blacklistedLeagueIds, match.leagueid);
 
-		if(!isBlacklisted) {
-			winston.info("TWEET: " + results.message);
-			this.tweet(results.message, matchMetadata);
+		// okay, now lets look up the detailed lobby info.
+		var lobbyInfo = this.states.getLobbyByTeamAndLeague(
+			[results.teams[0].team_id, results.teams[1].team_id],
+			match.leagueid);
+
+		// write out the match data anyway so we can manually build files if we have to
+		fs.writeFileSync("games/match_" + match.match_id + ".json", JSON.stringify(results));
+
+		if(lobbyInfo) {
+			winston.info("found a lobby: " + lobbyInfo + " trying to generate");
+			var success = boxscores.generate(lobbyInfo, results, _.bind(function(filename) {
+				// if boxscores fails to generate, it represents some sort of major
+				// missing data like no tower data or no gold history data.
+				// (over time I'll make this more tight; expect at least one gold
+				// event every 2-3 minutes for the duration of the game so we can 
+				// plausibly feel like we've captured the whole thing and it's worth
+				// an image.
+				winston.info("box scores generated: " + success);
+
+				// clean out the lobby data regardless; if we successfully generated,
+				// then we don't need it anymore. If we didn't, it was sort of bad
+				// data to begin with so clean it out. We'll rely on redis expiring
+				// the data on bot restart.
+				this.states.removeLobby(lobbyInfo.lastSnapshot.lobby_id);
+
+				// now do a media tweet. eventually this will ahve both varieties,
+				// but for now will be just one.
+				winston.info("about to tweet");
+
+				if(!isBlacklisted) {
+					if(isSilent || isDemo) {
+						winston.info("Skipping media premiuer tweet");
+					} else {
+						// NB that we're using results.shortMessage here, which should
+						// always have room for another 20 characters to tweet.
+						this.twitterMedia.post(results.shortMessage, "/tmp/" + filename, function(err, response, body) {
+							try {
+								winston.info("post twitter media: " + err + "; " + response.statusCode);
+								
+								if(response.statusCode != 200) {
+									winston.error(body);
+								}
+
+							} catch (e) {
+								winston.warn("exception posting twitter media response (minor)");
+							}
+						});	
+					}
+				} else {
+					if(isSilent || isDemo) {
+						winston.info("Skipping media alt tweet");
+					} else {
+						// NB that we're using results.shortMessage here, which should
+						// always have room for another 20 characters to tweet.
+						this.twitterAltMedia.post(results.shortMessage, "/tmp/" + filename, function(err, response, body) {
+							try {
+								winston.info("post twitter alt media: " + err + "; " + response.statusCode);
+								
+								if(response.statusCode != 200) {
+									winston.error(body);
+								}
+
+							} catch (e) {
+								winston.warn("exception posting twitter alt media response (minor)");
+							}
+						});	
+					}
+				}
+			}, this));
+
+			if(!success) {
+				// we need to tweet normally, without an image.
+				if(!isBlacklisted) {
+					winston.info("TWEET: " + results.message);
+					this.tweet(results.message, matchMetadata);
+				} else {
+					winston.info("TWEET.ALT: " + results.message);
+					this.altTweet(results.message, matchMetadata);
+				}
+			}
 		} else {
-			winston.info("TWEET.ALT: " + results.message);
-			this.altTweet(results.message, matchMetadata);
+			// do non-media tweets
+			if(!isBlacklisted) {
+				winston.info("TWEET: " + results.message);
+				this.tweet(results.message, matchMetadata);
+			} else {
+				winston.info("TWEET.ALT: " + results.message);
+				this.altTweet(results.message, matchMetadata);
+			}			
 		}
 
 		// I'm not totally sure why this doesn't delay until we get an ack from
@@ -900,17 +1056,17 @@ exports.ResultsServer.prototype = {
 		}
 
 		this.twitterAlt.post('statuses/update', { status: string }, _.bind(function(err, reply) {
-				if (err) {
-	  				winston.error("Error posting tweet: " + err);
+			if (err) {
+					winston.error("Error posting tweet: " + err);
 
-	  				if(err.message.indexOf('duplicate')!=-1 || err.message.indexOf('update limit')!=-1) {
-	  					winston.info("Error posting, duplicate or over limit - drop.");
-	  					this.removeMatchFromQueue(match);
-	  				}
-				} else {
-	  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
-				}
-  		}, this));
+					if(err.message.indexOf('duplicate')!=-1 || err.message.indexOf('update limit')!=-1) {
+						winston.info("Error posting, duplicate or over limit - drop.");
+						this.removeMatchFromQueue(match);
+					}
+			} else {
+					winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
+			}
+		}, this));
 	},
 
 	_tweet: function(string, match) {
