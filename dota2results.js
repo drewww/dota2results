@@ -953,10 +953,13 @@ exports.ResultsServer.prototype = {
 									this.tweet(results.message, matchMetadata);
 								}
 
-								winston.info("headers: " + JSON.stringify(response.headers));
+								winston.info("X-MediaRateLimit-Limit: "+ response.headers["X-MediaRateLimit-Limit"]);
+								winston.info("X-MediaRateLimit-Remaining: " + response.headers["X-MediaRateLimit-Remaining "]);
+								winston.info("X-MediaRateLimit-Reset: " + response.headers["X-MediaRateLimit-Reset"]);
+								winston.info("headers: " + Object.keys(response.headers));
 
 							} catch (e) {
-								winston.warn("exception posting twitter media response (minor)");
+								winston.warn("exception posting twitter media response (minor): " + e);
 							}
 						});	
 					}
