@@ -821,14 +821,14 @@ exports.ResultsServer.prototype = {
 		}
 
 		// We know we want to append a dotabuff link, and that it will get auto-shortened
-		// to a string of length 20; (see https://dev.twitter.com/docs/api/1/get/help/configuration - this could increase)
+		// to a string of max length 23; (see https://dev.twitter.com/docs/api/1/get/help/configuration - this could increase)
 		// so check and see if the content without the url is over the space we have left
 		// for a \n + a t.co link. If it is, then chop away at the league name
 		// which has started getting super long in some situations.
-		// (119 instead of 120 because of the \n character)
+		// (-1 because of the \n character)
 
-		if(tweetString.length > 119) {
-			tweetString = tweetString.substring(0, 119);
+		if(tweetString.length > (140-23-1)) {
+			tweetString = tweetString.substring(0, 140-23-1);
 		}
 
 		var baseString = tweetString;
@@ -840,21 +840,21 @@ exports.ResultsServer.prototype = {
 
 		// we're going to prepare an extra-short tweet string too, in case
 		// there's a picture to include. there are two cases here:
-		// 1. the resulting tweet in tweetString has room for an extra 20 characters
+		// 1. the resulting tweet in tweetString has room for an extra 23 characters
 		//	  for the twitter image link.
 		// 2. the resulting tweet does not have room. 
 		//		a. in this case, drop the dotabuff link and tweet the result, since
 		//		   we know that that's the same length.
 
 		var shortMessage;
-		if(tweetString.length > 119) {
+		if(tweetString.length > 140-23-1) {
 			// use the pre-dotabuff-appended link.
 			shortMessage = baseString;
 
 			// it seems like pic links are longer than normal links,
 			// so cut off some extra text just in case. Not totally sure
 			// about this number, can't find a reliable reference. Links
-			// should be 20 max, but I've seen references to 26 chars max
+			// should be 23 max, but I've seen references to 26 chars max
 			// for image links to edging on the careful side.
 			if(shortMessage.length > 112) {
 				shortMessage = shortMessage.substring(0, 112);
