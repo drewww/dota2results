@@ -950,7 +950,10 @@ exports.ResultsServer.prototype = {
 								
 								if(response.statusCode != 200) {
 									winston.error(body);
+									this.tweet(results.message, matchMetadata);
 								}
+
+								winston.info("headers: " + JSON.stringify(response.headers));
 
 							} catch (e) {
 								winston.warn("exception posting twitter media response (minor)");
@@ -969,7 +972,11 @@ exports.ResultsServer.prototype = {
 								
 								if(response.statusCode != 200) {
 									winston.error(body);
+									this.altTweet(results.message, matchMetadata);
 								}
+
+								winston.info("headers: " + JSON.stringify(response.headers));
+
 
 							} catch (e) {
 								winston.warn("exception posting twitter alt media response (minor)");
