@@ -944,7 +944,7 @@ exports.ResultsServer.prototype = {
 					} else {
 						// NB that we're using results.shortMessage here, which should
 						// always have room for another 20 characters to tweet.
-						this.twitterMedia.post(results.shortMessage, "/tmp/" + filename, function(err, response, body) {
+						this.twitterMedia.post(results.shortMessage, "/tmp/" + filename, _.bind(function(err, response, body) {
 							try {
 								winston.info("post twitter media: " + err + "; " + response.statusCode);
 								
@@ -953,15 +953,12 @@ exports.ResultsServer.prototype = {
 									this.tweet(results.message, matchMetadata);
 								}
 
-								winston.info("X-MediaRateLimit-Limit: "+ response.headers["X-MediaRateLimit-Limit"]);
-								winston.info("X-MediaRateLimit-Remaining: " + response.headers["X-MediaRateLimit-Remaining "]);
-								winston.info("X-MediaRateLimit-Reset: " + response.headers["X-MediaRateLimit-Reset"]);
 								winston.info("headers: " + Object.keys(response.headers));
 
 							} catch (e) {
 								winston.warn("exception posting twitter media response (minor): " + e);
 							}
-						});	
+						}, this));	
 					}
 				} else {
 					if(isSilent || isDemo) {
@@ -969,7 +966,7 @@ exports.ResultsServer.prototype = {
 					} else {
 						// NB that we're using results.shortMessage here, which should
 						// always have room for another 20 characters to tweet.
-						this.twitterAltMedia.post(results.shortMessage, "/tmp/" + filename, function(err, response, body) {
+						this.twitterAltMedia.post(results.shortMessage, "/tmp/" + filename, _.bind(function(err, response, body) {
 							try {
 								winston.info("post twitter alt media: " + err + "; " + response.statusCode);
 								
@@ -984,7 +981,7 @@ exports.ResultsServer.prototype = {
 							} catch (e) {
 								winston.warn("exception posting twitter alt media response (minor)");
 							}
-						});	
+						}, this));	
 					}
 				}
 			}, this));
