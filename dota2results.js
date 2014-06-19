@@ -918,7 +918,6 @@ exports.ResultsServer.prototype = {
 		fs.writeFileSync("games/match_" + match.match_id + ".json", JSON.stringify(results));
 
 		if(lobbyInfo) {
-			winston.info("found a lobby: " + lobbyInfo + " trying to generate");
 			var success = boxscores.generate(lobbyInfo, results, _.bind(function(filename) {
 				// if boxscores fails to generate, it represents some sort of major
 				// missing data like no tower data or no gold history data.
