@@ -280,7 +280,7 @@ exports.ResultsServer.prototype = {
 							out += k + ":" + matchCounts[k] + "\t";
 						});
 
-						winston.info(this.liveGames.length + " -> " + out);
+						winston.info(this.liveGames.length + " -> " + out + " (states: " + this.states.lobbiesTracked.length + ")");
 					}
 				}, this));
 			}, this));
@@ -926,7 +926,6 @@ exports.ResultsServer.prototype = {
 				// event every 2-3 minutes for the duration of the game so we can 
 				// plausibly feel like we've captured the whole thing and it's worth
 				// an image.
-				winston.info("box scores generated: " + success);
 
 				// clean out the lobby data regardless; if we successfully generated,
 				// then we don't need it anymore. If we didn't, it was sort of bad
@@ -936,11 +935,9 @@ exports.ResultsServer.prototype = {
 
 				// now do a media tweet. eventually this will ahve both varieties,
 				// but for now will be just one.
-				winston.info("about to tweet");
-
 				if(!isBlacklisted) {
 					if(isSilent || isDemo) {
-						winston.info("Skipping media premiuer tweet");
+						winston.info("Skipping media premier tweet");
 					} else {
 						// NB that we're using results.shortMessage here, which should
 						// always have room for another 20 characters to tweet.
