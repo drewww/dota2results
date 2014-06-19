@@ -280,7 +280,7 @@ exports.ResultsServer.prototype = {
 							out += k + ":" + matchCounts[k] + "\t";
 						});
 
-						winston.info(this.liveGames.length + " -> " + out + " (states: " + this.states.lobbiesTracked.length + ")");
+						winston.info(this.liveGames.length + " -> " + out + " (states: " + Object.keys(this.states.lobbies).length + ")");
 					}
 				}, this));
 			}, this));
