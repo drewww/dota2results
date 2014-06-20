@@ -668,8 +668,8 @@ exports.ResultsServer.prototype = {
 	},
 
 	processMatchDetails: function(matchDetails, matchMetadata) {
-		winston.info("matchDetails: " + JSON.stringify(matchDetails));
-		winston.info("matchMetadata: " + JSON.stringify(matchMetadata));
+		// winston.info("matchDetails: " + JSON.stringify(matchDetails));
+		// winston.info("matchMetadata: " + JSON.stringify(matchMetadata));
 		var teams = [];
 		_.each(["radiant", "dire"], function(name) {
 			var team = {};
