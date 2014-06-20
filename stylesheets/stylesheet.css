@@ -114,7 +114,7 @@ header h3.amateur {
 
 .inner {
   position: relative;
-  width: 940px;
+  width: 1024px;
   margin: 0 auto;
 }
 
@@ -242,6 +242,14 @@ form {
   background: #f2f2f2;
   padding: 20px;
   
+}
+
+div.left, div.right {
+  float: left;
+  width: 50%;
+  padding: 10px;
+
+  box-sizing: border-box;
 }
 
 
