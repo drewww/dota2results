@@ -919,6 +919,7 @@ exports.ResultsServer.prototype = {
 
 		if(lobbyInfo) {
 			var success = boxscores.generate(lobbyInfo, results, _.bind(function(filename) {
+				winston.info("generation successful: " + filename);
 				// if boxscores fails to generate, it represents some sort of major
 				// missing data like no tower data or no gold history data.
 				// (over time I'll make this more tight; expect at least one gold
