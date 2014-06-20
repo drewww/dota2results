@@ -244,8 +244,12 @@ exports.ResultsServer.prototype = {
 			// just ended its league might not be in the current list
 			// anymore.
 			var matchCounts = {};
+			var missingLeague = false;
 			_.each(Object.keys(this.activeLeagueIds), _.bind(function(leagueId) {
 				var league = this.leagues[leagueId];
+
+				// short circuit the whole loop if we're missing a league.
+				if(missingLeague) return;
 
 				if(_.isUndefined(league)) {
 					winston.error("League is not defined for " + leagueId);
@@ -256,7 +260,14 @@ exports.ResultsServer.prototype = {
 					// OH I know what happened. The patch hit, new tickets went out, and
 					// we didn't have them in the list. I think we need to do a full league
 					// update operation.
+
+					// this is a little error prone. The update league listing takes time,
+					// and if league is undefined, the next check is DEFINITELY going to fail.
+					// really we want to update the league listing, wait for that to execute
+					// and then return to this proces. 
 					this.updateLeagueListing();
+					missingLeague = true;
+					return;
 				}
 
 				if(_.isUndefined(league.lastSeenMatchIds)) {
