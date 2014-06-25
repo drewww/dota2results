@@ -221,7 +221,10 @@ exports.ResultsServer.prototype = {
 		  , token_secret:  process.env.TWITTER_ACCESS_TOKEN_SECRET
 		});
 
-		this.on("live-games:update", _.bind(function() {
+		// debouncing this call makes sure that it doesn't get called in rapid succession, which in some
+		// situations seemed to cause double tweeting / double processing of a single match. Adding a few
+		// seconds of delay in here will avoid that, I think.
+		this.on("live-games:update", _.debounce(_.bind(function() {
 			var leagues = this.getLeaguesWithLiveGames();
 
 			_.each(leagues, _.bind(function(league) {
@@ -308,8 +311,7 @@ exports.ResultsServer.prototype = {
 
 			// triggers some cleanup at the end of a set of snapshots.
 			this.states.finish();
-
-		}, this));
+		}, this), 2000));
 
 		if(Object.keys(this.leagues).length==0) {
 			this.updateLeagueListing();
