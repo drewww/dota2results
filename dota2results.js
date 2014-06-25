@@ -921,6 +921,10 @@ exports.ResultsServer.prototype = {
 
 		if(lobbyInfo) {
 			var success = boxscores.generate(lobbyInfo, results, _.bind(function(filename) {
+				// this method is called only on success. this is a little wonky for sure, but
+				// that's just the way it is.
+
+
 				winston.info("generation successful: " + filename);
 				// if boxscores fails to generate, it represents some sort of major
 				// missing data like no tower data or no gold history data.
@@ -943,6 +947,8 @@ exports.ResultsServer.prototype = {
 					} else {
 						// NB that we're using results.shortMessage here, which should
 						// always have room for another 20 characters to tweet.
+
+						winston.info("TWEET MEDIA: " + results.shortMessage);
 						this.twitterMedia.post(results.shortMessage, "/tmp/" + filename, _.bind(function(err, response, body) {
 							try {
 								winston.info("post twitter media: " + err + "; " + response.statusCode);
@@ -965,6 +971,7 @@ exports.ResultsServer.prototype = {
 					} else {
 						// NB that we're using results.shortMessage here, which should
 						// always have room for another 20 characters to tweet.
+						winston.info("TWEET.ALT MEDIA: " + results.shortMessage);
 						this.twitterAltMedia.post(results.shortMessage, "/tmp/" + filename, _.bind(function(err, response, body) {
 							try {
 								winston.info("post twitter alt media: " + err + "; " + response.statusCode);
@@ -986,22 +993,25 @@ exports.ResultsServer.prototype = {
 			}, this));
 
 			if(!success) {
+				// this wasn't necessarily happening otherwise.
+				this.states.removeLobby(lobbyInfo.lastSnapshot.lobby_id);
+
 				// we need to tweet normally, without an image.
 				if(!isBlacklisted) {
-					winston.info("TWEET: " + results.message);
+					winston.info("TWEET (generate failed): " + results.message);
 					this.tweet(results.message, matchMetadata);
 				} else {
-					winston.info("TWEET.ALT: " + results.message);
+					winston.info("TWEET.ALT (generate failed): " + results.message);
 					this.altTweet(results.message, matchMetadata);
 				}
 			}
 		} else {
 			// do non-media tweets
 			if(!isBlacklisted) {
-				winston.info("TWEET: " + results.message);
+				winston.info("TWEET (missing lobby info): " + results.message);
 				this.tweet(results.message, matchMetadata);
 			} else {
-				winston.info("TWEET.ALT: " + results.message);
+				winston.info("TWEET.ALT (missing lobby info): " + results.message);
 				this.altTweet(results.message, matchMetadata);
 			}			
 		}
