@@ -311,7 +311,7 @@ exports.ResultsServer.prototype = {
 
 			// triggers some cleanup at the end of a set of snapshots.
 			this.states.finish();
-		}, this), 2000));
+		}, this), 5000));
 
 		if(Object.keys(this.leagues).length==0) {
 			this.updateLeagueListing();
@@ -1006,13 +1006,20 @@ exports.ResultsServer.prototype = {
 				}
 			}
 		} else {
+			// we're going to decline to tweet without lobby info and see how that goes.
+			winston.warn("Not tweeting because lobby info was missing: " + results.message);
+
+			// as far as I can tell this happens largely beacuse it's a double tweet and an
+			// earlier tweet attempt flushed that particular lobbyId so it's not present
+			// when the second tweet attempt 
+
 			// do non-media tweets
 			if(!isBlacklisted) {
-				winston.info("TWEET (missing lobby info): " + results.message);
-				this.tweet(results.message, matchMetadata);
+				winston.info("NO TWEET (missing lobby info): " + results.message);
+				// this.tweet(results.message, matchMetadata);
 			} else {
-				winston.info("TWEET.ALT (missing lobby info): " + results.message);
-				this.altTweet(results.message, matchMetadata);
+				winston.info("NO TWEET.ALT (missing lobby info): " + results.message);
+				// this.altTweet(results.message, matchMetadata);
 			}			
 		}
 
