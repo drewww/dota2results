@@ -669,7 +669,7 @@ exports.ResultsServer.prototype = {
 		}, this));
 	},
 
-	processMatchDetails: function(matchDetails, matchMetadata) {
+	processMatchDetails: function(matchDetails, matchMetadata, lobbyInfo) {
 		// winston.info("matchDetails: " + JSON.stringify(matchDetails));
 		// winston.info("matchMetadata: " + JSON.stringify(matchMetadata));
 		var teams = [];
@@ -748,6 +748,19 @@ exports.ResultsServer.prototype = {
 
 			if(teams[1].winner) {
 				teamId = teams[1]["team_id"];
+			}
+
+			// now, even after doing all this work, lets check on 
+			// lobbyInfo. If it's present, let its options override
+			// what we calculated since it's probably more accurate.
+			if(lobbyInfo && lobbyInfo.lastSnapshot.series_type>0) {
+				// the trick here is mapping team_id and dire/radiant
+				winston.info("overwriting series_wins with lobby info. original: " + JSON.stringify(seriesStatus.teams));
+				seriesStatus.teams[lobbyInfo.lastSnapshot.radiant_team.team_id] = lobbyInfo.lastSnapshot.radiant_series_wins;
+				seriesStatus.teams[lobbyInfo.lastSnapshot.dire_team.team_id] = lobbyInfo.lastSnapshot.dire_series_wins;
+				winston.info("resulting series_wins: " + JSON.stringify(seriesStatus.teams));
+			} else {
+				winston.info("Lobby info not present or series_type==0; using normal series tracking: " + JSON.stringify(lobbyInfo));
 			}
 
 			seriesStatus.teams[teamId] = seriesStatus.teams[teamId]+1;
@@ -899,7 +912,12 @@ exports.ResultsServer.prototype = {
 	},
 
 	handleFinishedMatch: function(match, matchMetadata) {
-		var results = this.processMatchDetails(match, matchMetadata);
+		// okay, now lets look up the detailed lobby info.
+		var lobbyInfo = this.states.getLobbyByTeamAndLeague(
+			[match.radiant_team_id, match.dire_team_id], match.leagueid);
+
+		// make the lobbyInfo available to processMatchDetails if possible. 
+		var results = this.processMatchDetails(match, matchMetadata, lobbyInfo);
 
 		// drop out, but mark this match as processed.
 		if(!this.isValidMatch(results)) {
@@ -910,11 +928,6 @@ exports.ResultsServer.prototype = {
 		winston.info(JSON.stringify(results));
 
 		var isBlacklisted = _.contains(this.blacklistedLeagueIds, match.leagueid);
-
-		// okay, now lets look up the detailed lobby info.
-		var lobbyInfo = this.states.getLobbyByTeamAndLeague(
-			[results.teams[0].team_id, results.teams[1].team_id],
-			match.leagueid);
 
 		// write out the match data anyway so we can manually build files if we have to
 		fs.writeFileSync("games/match_" + match.match_id + ".json", JSON.stringify(results));
