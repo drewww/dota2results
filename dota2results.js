@@ -221,7 +221,10 @@ exports.ResultsServer.prototype = {
 		  , token_secret:  process.env.TWITTER_ACCESS_TOKEN_SECRET
 		});
 
-		this.on("live-games:update", _.bind(function() {
+		// debouncing this call makes sure that it doesn't get called in rapid succession, which in some
+		// situations seemed to cause double tweeting / double processing of a single match. Adding a few
+		// seconds of delay in here will avoid that, I think.
+		this.on("live-games:update", _.debounce(_.bind(function() {
 			var leagues = this.getLeaguesWithLiveGames();
 
 			_.each(leagues, _.bind(function(league) {
@@ -319,8 +322,7 @@ exports.ResultsServer.prototype = {
 
 			// triggers some cleanup at the end of a set of snapshots.
 			this.states.finish();
-
-		}, this));
+		}, this), 5000));
 
 		if(Object.keys(this.leagues).length==0) {
 			this.updateLeagueListing();
@@ -678,7 +680,7 @@ exports.ResultsServer.prototype = {
 		}, this));
 	},
 
-	processMatchDetails: function(matchDetails, matchMetadata) {
+	processMatchDetails: function(matchDetails, matchMetadata, lobbyInfo) {
 		// winston.info("matchDetails: " + JSON.stringify(matchDetails));
 		// winston.info("matchMetadata: " + JSON.stringify(matchMetadata));
 		var teams = [];
@@ -757,6 +759,19 @@ exports.ResultsServer.prototype = {
 
 			if(teams[1].winner) {
 				teamId = teams[1]["team_id"];
+			}
+
+			// now, even after doing all this work, lets check on 
+			// lobbyInfo. If it's present, let its options override
+			// what we calculated since it's probably more accurate.
+			if(lobbyInfo && lobbyInfo.lastSnapshot.series_type>0) {
+				// the trick here is mapping team_id and dire/radiant
+				winston.info("overwriting series_wins with lobby info. original: " + JSON.stringify(seriesStatus.teams));
+				seriesStatus.teams[lobbyInfo.lastSnapshot.radiant_team.team_id] = lobbyInfo.lastSnapshot.radiant_series_wins;
+				seriesStatus.teams[lobbyInfo.lastSnapshot.dire_team.team_id] = lobbyInfo.lastSnapshot.dire_series_wins;
+				winston.info("resulting series_wins: " + JSON.stringify(seriesStatus.teams));
+			} else {
+				winston.info("Lobby info not present or series_type==0; using normal series tracking: " + JSON.stringify(lobbyInfo));
 			}
 
 			seriesStatus.teams[teamId] = seriesStatus.teams[teamId]+1;
@@ -908,7 +923,12 @@ exports.ResultsServer.prototype = {
 	},
 
 	handleFinishedMatch: function(match, matchMetadata) {
-		var results = this.processMatchDetails(match, matchMetadata);
+		// okay, now lets look up the detailed lobby info.
+		var lobbyInfo = this.states.getLobbyByTeamAndLeague(
+			[match.radiant_team_id, match.dire_team_id], match.leagueid);
+
+		// make the lobbyInfo available to processMatchDetails if possible. 
+		var results = this.processMatchDetails(match, matchMetadata, lobbyInfo);
 
 		// drop out, but mark this match as processed.
 		if(!this.isValidMatch(results)) {
@@ -920,16 +940,16 @@ exports.ResultsServer.prototype = {
 
 		var isBlacklisted = _.contains(this.blacklistedLeagueIds, match.leagueid);
 
-		// okay, now lets look up the detailed lobby info.
-		var lobbyInfo = this.states.getLobbyByTeamAndLeague(
-			[results.teams[0].team_id, results.teams[1].team_id],
-			match.leagueid);
-
 		// write out the match data anyway so we can manually build files if we have to
 		fs.writeFileSync("games/match_" + match.match_id + ".json", JSON.stringify(results));
 
 		if(lobbyInfo) {
 			var success = boxscores.generate(lobbyInfo, results, _.bind(function(filename) {
+				// this method is called only on success. this is a little wonky for sure, but
+				// that's just the way it is.
+
+
+				winston.info("generation successful: " + filename);
 				// if boxscores fails to generate, it represents some sort of major
 				// missing data like no tower data or no gold history data.
 				// (over time I'll make this more tight; expect at least one gold
@@ -951,6 +971,8 @@ exports.ResultsServer.prototype = {
 					} else {
 						// NB that we're using results.shortMessage here, which should
 						// always have room for another 20 characters to tweet.
+
+						winston.info("TWEET MEDIA: " + results.shortMessage);
 						this.twitterMedia.post(results.shortMessage, "/tmp/" + filename, _.bind(function(err, response, body) {
 							try {
 								winston.info("post twitter media: " + err + "; " + response.statusCode);
@@ -973,6 +995,7 @@ exports.ResultsServer.prototype = {
 					} else {
 						// NB that we're using results.shortMessage here, which should
 						// always have room for another 20 characters to tweet.
+						winston.info("TWEET.ALT MEDIA: " + results.shortMessage);
 						this.twitterAltMedia.post(results.shortMessage, "/tmp/" + filename, _.bind(function(err, response, body) {
 							try {
 								winston.info("post twitter alt media: " + err + "; " + response.statusCode);
@@ -994,23 +1017,33 @@ exports.ResultsServer.prototype = {
 			}, this));
 
 			if(!success) {
+				// this wasn't necessarily happening otherwise.
+				this.states.removeLobby(lobbyInfo.lastSnapshot.lobby_id);
+
 				// we need to tweet normally, without an image.
 				if(!isBlacklisted) {
-					winston.info("TWEET: " + results.message);
+					winston.info("TWEET (generate failed): " + results.message);
 					this.tweet(results.message, matchMetadata);
 				} else {
-					winston.info("TWEET.ALT: " + results.message);
+					winston.info("TWEET.ALT (generate failed): " + results.message);
 					this.altTweet(results.message, matchMetadata);
 				}
 			}
 		} else {
+			// we're going to decline to tweet without lobby info and see how that goes.
+			winston.warn("Not tweeting because lobby info was missing: " + results.message);
+
+			// as far as I can tell this happens largely beacuse it's a double tweet and an
+			// earlier tweet attempt flushed that particular lobbyId so it's not present
+			// when the second tweet attempt 
+
 			// do non-media tweets
 			if(!isBlacklisted) {
-				winston.info("TWEET: " + results.message);
-				this.tweet(results.message, matchMetadata);
+				winston.info("NO TWEET (missing lobby info): " + results.message);
+				// this.tweet(results.message, matchMetadata);
 			} else {
-				winston.info("TWEET.ALT: " + results.message);
-				this.altTweet(results.message, matchMetadata);
+				winston.info("NO TWEET.ALT (missing lobby info): " + results.message);
+				// this.altTweet(results.message, matchMetadata);
 			}			
 		}
 
