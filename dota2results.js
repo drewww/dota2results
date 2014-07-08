@@ -180,6 +180,14 @@ exports.ResultsServer.prototype = {
 				// from redis.
 				this.states = new GameStates(this.redis);
 
+				this.states.on("game-over", _.bind(function(matchId, leagueId) {
+					winston.info("GAME OVER CALLBACK");
+					if(leagueId==600) {
+						winston.info("got a game over event on a TI4 game, processing it");
+						this.logRecentMatch({match_id:matchId}, this.leagues[leagueId]);
+					}
+				}, this));
+
 			}, this));
 		} else {
 			winston.warn("Redis connection information not available.");
@@ -366,10 +374,11 @@ exports.ResultsServer.prototype = {
 	},
 
 	logRecentMatch: function(match,league) {
-		winston.info("logRecentMatch: " + match.match_id);
+		// winston.info("logRecentMatch: " + match.match_id);
+		// winston.info("league: " + JSON.stringify(league));
 		// first, check it against the league listing.
 		if(_.contains(league.lastSeenMatchIds, match.match_id)) {
-			winston.info("Match_id (" + match.match_id + ") is lower than last logged: " + league.mostRecentMatchId);
+			// winston.info("match_id (" + match.match_id + ") has been seen already: " + JSON.stringify(league.lastSeenMatchIds) + " for league " + league.league_id);
 			return;
 		} else {
 			// Even in the delay case, we want to adjust this list so that we don't
@@ -915,6 +924,8 @@ exports.ResultsServer.prototype = {
 	},
 
 	handleFinishedMatch: function(match, matchMetadata) {
+		winston.info(JSON.stringify(match));
+		winston.info(JSON.stringify(matchMetadata));
 		// okay, now lets look up the detailed lobby info.
 		var lobbyInfo = this.states.getLobbyByTeamAndLeague(
 			[match.radiant_team_id, match.dire_team_id], match.leagueid);
