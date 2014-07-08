@@ -366,9 +366,10 @@ exports.ResultsServer.prototype = {
 	},
 
 	logRecentMatch: function(match,league) {
+		winston.info("logRecentMatch: " + match.match_id);
 		// first, check it against the league listing.
 		if(_.contains(league.lastSeenMatchIds, match.match_id)) {
-			// winston.info("Match_id (" + match.match_id + ") is lower than last logged: " + league.mostRecentMatchId);
+			winston.info("Match_id (" + match.match_id + ") is lower than last logged: " + league.mostRecentMatchId);
 			return;
 		} else {
 			// Even in the delay case, we want to adjust this list so that we don't
@@ -425,6 +426,8 @@ exports.ResultsServer.prototype = {
 			} else if(league.demo) {
 				// tweet the first thing we encounter just to test, then bail.
 				this.loadMatchDetails(match, _.bind(this.handleFinishedMatch, this));
+			} else {
+				winston.info("league init issue! league: " + JSON.stringify(league));
 			}
 		}
 	},
