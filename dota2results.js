@@ -965,9 +965,9 @@ exports.ResultsServer.prototype = {
 		try {
 			var results = this.processMatchDetails(match, matchMetadata, lobbyInfo);
 		} catch (e) {
+			this.removeMatchFromQueue(match);
 			winston.warn("Error processing match: " + e);
 			winston.warn(new Error().stack);
-			this.removeMatchFromQueue(match);
 			return;
 		}
 
