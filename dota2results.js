@@ -436,7 +436,7 @@ exports.ResultsServer.prototype = {
 				// tweet the first thing we encounter just to test, then bail.
 				this.loadMatchDetails(match, _.bind(this.handleFinishedMatch, this));
 			} else {
-				winston.info("league init issue! league: " + JSON.stringify(league));
+				// winston.info("league init issue! league: " + JSON.stringify(league));
 			}
 		}
 	},
