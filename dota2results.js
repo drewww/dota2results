@@ -679,10 +679,13 @@ exports.ResultsServer.prototype = {
 		}
 
 		this.api().getMatchDetails(matchMetadata.match_id, _.bind(function(err, match) {
-			if(err) {
+			if(err || match.error) {
 				winston.error("error loading match: " + err);
 				// in this case we DON'T pull it from the queue; we want to retry
 				// these. But any other type of error we want to toss it.
+				if(match.error) {
+					this.removeMatchFromQueue(matchMetadata);
+				}
 				return;
 			}
 
@@ -965,7 +968,8 @@ exports.ResultsServer.prototype = {
 		try {
 			var results = this.processMatchDetails(match, matchMetadata, lobbyInfo);
 		} catch (e) {
-			this.removeMatchFromQueue(match);
+			winston.info(JSON.stringify(match));
+			this.removeMatchFromQueue(matchMeta);
 			winston.warn("Error processing match: " + e);
 			winston.warn(new Error().stack);
 			return;
@@ -1212,11 +1216,13 @@ exports.ResultsServer.prototype = {
 	},
 
 	removeMatchFromQueue: function(match) {
-		winston.debug("Removing match id after completed or declined tweet: " + match.match_id);
+		winston.info("Removing match id after completed or declined tweet: " + match.match_id);
 
+		winston.info("matches before: " + JSON.stringify(this.matchesToTweet));
 		this.matchesToTweet = _.reject(this.matchesToTweet, function(m) {
 			return m.match_id==match.match_id;
 		});
+		winston.info("matches after: " + JSON.stringify(this.matchesToTweet));
 
 		// remove the details cache too to keep it from accumulating.
 		delete this.matchDetailsCache[match.match_id];
