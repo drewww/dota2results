@@ -955,8 +955,8 @@ exports.ResultsServer.prototype = {
 	},
 
 	handleFinishedMatch: function(match, matchMetadata) {
-		winston.info(JSON.stringify(match));
-		winston.info(JSON.stringify(matchMetadata));
+		// winston.info(JSON.stringify(match));
+		// winston.info(JSON.stringify(matchMetadata));
 		// okay, now lets look up the detailed lobby info.
 		var lobbyInfo = this.states.getLobbyByTeamAndLeague(
 			[match.radiant_team_id, match.dire_team_id], match.leagueid);
