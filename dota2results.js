@@ -738,7 +738,7 @@ exports.ResultsServer.prototype = {
 
 		// look first in the lobby info. for TI games, we won't have any
 		// matchMetadata at all to work with. 
-		if(lobbyInfo.lastSnapshot.series_type > 0 || matchMetadata.series_type > 0) {
+		if((lobbyInfo && lobbyInfo.lastSnapshot.series_type > 0) || matchMetadata.series_type > 0) {
 			var seriesType, seriesId, usingLobbyInfo;
 
 			if(lobbyInfo.lastSnapshot.series_type > 0) {
@@ -955,6 +955,7 @@ exports.ResultsServer.prototype = {
 			var results = this.processMatchDetails(match, matchMetadata, lobbyInfo);
 		} catch (e) {
 			winston.warn("Error processing match: " + e);
+			winston.warn(new Error().stack);
 			this.removeMatchFromQueue(match);
 			return;
 		}
