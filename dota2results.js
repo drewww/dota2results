@@ -180,6 +180,14 @@ exports.ResultsServer.prototype = {
 				// from redis.
 				this.states = new GameStates(this.redis);
 
+				this.states.on("game-over", _.bind(function(matchId, leagueId) {
+					winston.info("GAME OVER CALLBACK");
+					if(leagueId==600) {
+						winston.info("got a game over event on a TI4 game, processing it");
+						this.logRecentMatch({match_id:matchId}, this.leagues[leagueId]);
+					}
+				}, this));
+
 			}, this));
 		} else {
 			winston.warn("Redis connection information not available.");
@@ -377,9 +385,11 @@ exports.ResultsServer.prototype = {
 	},
 
 	logRecentMatch: function(match,league) {
+		// winston.info("logRecentMatch: " + match.match_id);
+		// winston.info("league: " + JSON.stringify(league));
 		// first, check it against the league listing.
 		if(_.contains(league.lastSeenMatchIds, match.match_id)) {
-			// winston.info("Match_id (" + match.match_id + ") is lower than last logged: " + league.mostRecentMatchId);
+			// winston.info("match_id (" + match.match_id + ") has been seen already: " + JSON.stringify(league.lastSeenMatchIds) + " for league " + league.league_id);
 			return;
 		} else {
 			// Even in the delay case, we want to adjust this list so that we don't
@@ -436,6 +446,8 @@ exports.ResultsServer.prototype = {
 			} else if(league.demo) {
 				// tweet the first thing we encounter just to test, then bail.
 				this.loadMatchDetails(match, _.bind(this.handleFinishedMatch, this));
+			} else {
+				// winston.info("league init issue! league: " + JSON.stringify(league));
 			}
 		}
 	},
@@ -735,43 +747,62 @@ exports.ResultsServer.prototype = {
 		// now, lets update the series_id information.
 		// first, check and see if this series has been seen before.
 
-		if(matchMetadata.series_type > 0) {
-			winston.debug("ACTIVE SERIES: " + matchMetadata.series_id);
+		// look first in the lobby info. for TI games, we won't have any
+		// matchMetadata at all to work with. 
+		if((lobbyInfo && lobbyInfo.lastSnapshot.series_type > 0) || matchMetadata.series_type > 0) {
+			var seriesType, seriesId, usingLobbyInfo;
+
+			if(lobbyInfo.lastSnapshot.series_type > 0) {
+				seriesType = lobbyInfo.lastSnapshot.series_type;
+				seriesId = null;
+				usingLobbyInfo = true;
+			} else {
+				seriesType = matchMetadata.series_type;
+				seriesId = matchMetadata.series_id;
+				usingLobbyInfo = false;
+			}
+
+			winston.debug("ACTIVE SERIES: " + seriesId + " with type " + seriesType);
 			winston.debug("activeSeriesIds:" + JSON.stringify(this.activeSeriesIds));
 
-			var seriesStatus;
-			if(matchMetadata.series_id in this.activeSeriesIds) {
-				seriesStatus = _.clone(this.activeSeriesIds[matchMetadata.series_id]);
-			} else {
-				seriesStatus = {
-					series_id: matchMetadata.series_id,
-					series_type: matchMetadata.series_type,
-					teams: {},
-					time: new Date().getTime()
-				}
+			// the logic starts to diverge here. there are two cases:
+			// 1. we have matchMetadata, eg the old system of GetMatchHistory works,
+			//	  and we found the match that way.
+			// 2. we don't have matchMetadata and are relying on GetLiveLeagueGames-generated
+			//    events to determine when a game has ended. In that case, we don't have
+			//    a series_id, but we do have series_type and the aggregated radiant_series_wins
+			//	  and dire_series_wins. 
 
-				seriesStatus.teams[teams[0]["team_id"]] = 0;
-				seriesStatus.teams[teams[1]["team_id"]] = 0;
+			// this is the minimum structure we need. 
+			// we generate more elaborate structure only if we are doing the old-fashioned
+			// style.
+			var seriesStatus = {"teams":{}};
+			if(usingLobbyInfo) {
+				seriesStatus.teams[lobbyInfo.lastSnapshot.radiant_team.team_id] = lobbyInfo.lastSnapshot.radiant_series_wins;
+				seriesStatus.teams[lobbyInfo.lastSnapshot.dire_team.team_id] = lobbyInfo.lastSnapshot.dire_series_wins;
+			} else {
+				// this branch is concerned with the cached version of series status only.
+				if(series_id && (series_id in this.activeSeriesIds)) {
+					seriesStatus = _.clone(this.activeSeriesIds[matchMetadata.series_id]);
+				} else {
+					seriesStatus = {
+						series_id: matchMetadata.series_id,
+						series_type: matchMetadata.series_type,
+						teams: {},
+						time: new Date().getTime()
+					}
+
+					seriesStatus.teams[teams[0]["team_id"]] = 0;
+					seriesStatus.teams[teams[1]["team_id"]] = 0;
+				}
 			}
+
 
 			// now update the results based on who won
 			var teamId = teams[0]["team_id"];
 
 			if(teams[1].winner) {
 				teamId = teams[1]["team_id"];
-			}
-
-			// now, even after doing all this work, lets check on 
-			// lobbyInfo. If it's present, let its options override
-			// what we calculated since it's probably more accurate.
-			if(lobbyInfo && lobbyInfo.lastSnapshot.series_type>0) {
-				// the trick here is mapping team_id and dire/radiant
-				winston.info("overwriting series_wins with lobby info. original: " + JSON.stringify(seriesStatus.teams));
-				seriesStatus.teams[lobbyInfo.lastSnapshot.radiant_team.team_id] = lobbyInfo.lastSnapshot.radiant_series_wins;
-				seriesStatus.teams[lobbyInfo.lastSnapshot.dire_team.team_id] = lobbyInfo.lastSnapshot.dire_series_wins;
-				winston.info("resulting series_wins: " + JSON.stringify(seriesStatus.teams));
-			} else {
-				winston.info("Lobby info not present or series_type==0; using normal series tracking: " + JSON.stringify(lobbyInfo));
 			}
 
 			seriesStatus.teams[teamId] = seriesStatus.teams[teamId]+1;
@@ -816,6 +847,7 @@ exports.ResultsServer.prototype = {
 
 			winston.debug("activeSeriesIds POST:" + JSON.stringify(this.activeSeriesIds));
 		} else {
+			// this branch is for non series, eg bo1.
 			teams[0].series_wins = null;
 			teams[1].series_wins = null;
 			teams[0].wins_string = "";
@@ -923,12 +955,21 @@ exports.ResultsServer.prototype = {
 	},
 
 	handleFinishedMatch: function(match, matchMetadata) {
+		winston.info(JSON.stringify(match));
+		winston.info(JSON.stringify(matchMetadata));
 		// okay, now lets look up the detailed lobby info.
 		var lobbyInfo = this.states.getLobbyByTeamAndLeague(
 			[match.radiant_team_id, match.dire_team_id], match.leagueid);
 
 		// make the lobbyInfo available to processMatchDetails if possible. 
-		var results = this.processMatchDetails(match, matchMetadata, lobbyInfo);
+		try {
+			var results = this.processMatchDetails(match, matchMetadata, lobbyInfo);
+		} catch (e) {
+			winston.warn("Error processing match: " + e);
+			winston.warn(new Error().stack);
+			this.removeMatchFromQueue(match);
+			return;
+		}
 
 		// drop out, but mark this match as processed.
 		if(!this.isValidMatch(results)) {
@@ -1171,7 +1212,7 @@ exports.ResultsServer.prototype = {
 	},
 
 	removeMatchFromQueue: function(match) {
-		winston.debug("Removing match id after successful tweet: " + match.match_id);
+		winston.debug("Removing match id after completed or declined tweet: " + match.match_id);
 
 		this.matchesToTweet = _.reject(this.matchesToTweet, function(m) {
 			return m.match_id==match.match_id;
