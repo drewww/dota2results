@@ -969,7 +969,7 @@ exports.ResultsServer.prototype = {
 			var results = this.processMatchDetails(match, matchMetadata, lobbyInfo);
 		} catch (e) {
 			winston.info(JSON.stringify(match));
-			this.removeMatchFromQueue(matchMeta);
+			this.removeMatchFromQueue(matchMetadata);
 			winston.warn("Error processing match: " + e);
 			winston.warn(new Error().stack);
 			return;
