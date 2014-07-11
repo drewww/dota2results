@@ -871,6 +871,10 @@ exports.ResultsServer.prototype = {
 
 		var league = this.leagues[matchDetails.leagueid];
 
+		if(matchDetails.leagueid==600) {
+			league.name = "@DOTA2 International 2014";
+		}
+
 		var tweetString = teams[0].wins_string + " " + teams[0].displayName + " " + teams[0].kills + "\u2014" + teams[1].kills + " " + teams[1].displayName + " " + teams[1].wins_string + "\n";
 		tweetString = tweetString + durationString + " / " +league.name + "   \n";
 
