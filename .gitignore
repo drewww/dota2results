@@ -19,3 +19,5 @@ conf.sh
 misc
 games/*.json
 images/*.png
+
+.DS_Store
