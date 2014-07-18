@@ -260,7 +260,7 @@ exports.ResultsServer.prototype = {
 				var league = this.leagues[leagueId];
 
 				// short circuit the whole loop if we're missing a league.
-				if(missingLeague) return;
+				// if(missingLeague) return;
 
 				if(_.isUndefined(league)) {
 					winston.error("League is not defined for " + leagueId);
@@ -276,8 +276,8 @@ exports.ResultsServer.prototype = {
 					// and if league is undefined, the next check is DEFINITELY going to fail.
 					// really we want to update the league listing, wait for that to execute
 					// and then return to this proces. 
-					this.updateLeagueListing();
-					missingLeague = true;
+					// this.updateLeagueListing();
+					// missingLeague = true;
 					return;
 				}
 
