@@ -396,7 +396,11 @@ exports.ResultsServer.prototype = {
 			// keep adding the delayed match to the list of tweets multiple times.
 			// In the case where we shutdown after this point, it's okay; we'll work
 			// it out on restart.
-			league.lastSeenMatchIds.push(match.match_id);
+			if(league.lastSeenMatchIds) {
+				league.lastSeenMatchIds.push(match.match_id);
+			} else {
+				winston.warn("Some weird issue with lastseen match ids: " + JSON.stringify(league));
+			}
 
 			// if we're still in init mode, don't tweet.
 			if(!league.init) {
