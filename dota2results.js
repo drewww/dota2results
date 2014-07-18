@@ -256,6 +256,16 @@ exports.ResultsServer.prototype = {
 			// anymore.
 			var matchCounts = {};
 			var missingLeague = false;
+
+			winston.info(JSON.stringify(this.activeLeagueIds));
+
+			// this stupid league breaking things during TI
+			try {
+				delete this.activeLeagueIds[1645];				
+			} catch (e) {
+				// do nothing
+			}
+
 			_.each(Object.keys(this.activeLeagueIds), _.bind(function(leagueId) {
 				var league = this.leagues[leagueId];
 
