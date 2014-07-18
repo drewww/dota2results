@@ -178,7 +178,7 @@ exports.ResultsServer.prototype = {
 
 				// eventually this will also trigger game states to load
 				// from redis.
-				this.states = new GameStates(this.redis);
+				this.states = new GameStates(this.redis, isSilent);
 
 				this.states.on("game-over", _.bind(function(matchId, leagueId) {
 					winston.info("GAME OVER CALLBACK");
