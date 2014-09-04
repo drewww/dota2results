@@ -889,6 +889,14 @@ exports.ResultsServer.prototype = {
 			league.name = "The International 2014 #ti4";
 		}
 
+		// drop the word "ticket" in all situations
+		if(league.name.indexOf("Season ") > -1) {
+			league.name = league.name.replace("Season ", "S");
+		}
+
+		league.name = league.name.replace(" Ticket", "");
+		league.name = league.name.replace(" League", "");
+
 		var tweetString = teams[0].wins_string + " " + teams[0].displayName + " " + teams[0].kills + "\u2014" + teams[1].kills + " " + teams[1].displayName + " " + teams[1].wins_string + "\n";
 		tweetString = tweetString + durationString + " / " +league.name + "   \n";
 
