@@ -797,6 +797,7 @@ exports.ResultsServer.prototype = {
 			if(usingLobbyInfo) {
 				seriesStatus.teams[lobbyInfo.lastSnapshot.radiant_team.team_id] = lobbyInfo.lastSnapshot.radiant_series_wins;
 				seriesStatus.teams[lobbyInfo.lastSnapshot.dire_team.team_id] = lobbyInfo.lastSnapshot.dire_series_wins;
+				seriesStatus.series_type = lobbyInfo.lastSnapshot.series_type;
 			} else {
 				// this branch is concerned with the cached version of series status only.
 				if(series_id && (series_id in this.activeSeriesIds)) {
