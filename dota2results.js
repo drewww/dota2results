@@ -895,6 +895,10 @@ exports.ResultsServer.prototype = {
 			league.name = league.name.replace("Season ", "S");
 		}
 
+		if(league.name.indexOf("Captains Draft") > -1) {
+			league.name = league.name.replace("Captains Draft", "CD");
+		}
+
 		league.name = league.name.replace(" Ticket", "");
 		league.name = league.name.replace(" League", "");
 
