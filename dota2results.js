@@ -86,6 +86,7 @@ exports.ResultsServer.prototype = {
 	activeLeagueIds: null,
 
 	leagueStreamDelays: null,
+	leagueTier: null,
 
 	blacklistedLeagueIds: null,
 
@@ -110,6 +111,9 @@ exports.ResultsServer.prototype = {
 
 		// maps league_ids to stream delays, in seconds.
 		this.leagueStreamDelays = {};
+
+		// maps league_ids to league_tiers, an enumerated int: 1, 2, 3
+		this.leagueTier = {};
 
 		// the match details cache relates match_ids to a full
 		// JSON response from the server. They're cleaned out
@@ -348,7 +352,7 @@ exports.ResultsServer.prototype = {
 
 		// this is artificially low for testing purposes.
 		// in production, probably set this high again.
-		var duration = 30*1000;
+		var duration = 90*1000;
 		if(this.isDemo) {
 			// we want to pick a random league that's not blacklisted
 			// and tweet from it occasionally.
@@ -372,6 +376,10 @@ exports.ResultsServer.prototype = {
 			}, this), 5000);
 		} else {
 			// now kick off a periodic live games update.
+			// this is the core loop for the bot;
+			// every `duraton` ms it hits liveLeagueGames
+			// and looks for a state change that we need to
+			// be aware of. 
 			this.updater = setInterval(_.bind(function() {
 				this.checkForLiveLeagueGames();
 
@@ -394,6 +402,9 @@ exports.ResultsServer.prototype = {
 		winston.info("DESTROY ResultsServer");
 	},
 
+	// when we're gong to actually process a completed match,
+	// this is the method to call. This will eventually lead
+	// to a tweet being fired off, if appropriate. 
 	logRecentMatch: function(match,league) {
 		// winston.info("logRecentMatch: " + match.match_id);
 		// winston.info("league: " + JSON.stringify(league));
@@ -466,6 +477,8 @@ exports.ResultsServer.prototype = {
 		}
 	},
 
+	// Lots of league-specific data is cached since that endpoint
+	// changes very infrequently. 
 	updateLeagueListing: function() {
 		winston.info("Updating league listing.");
 		this.api().getLeagueListing(_.bind(function(err, res) {
@@ -534,6 +547,12 @@ exports.ResultsServer.prototype = {
 		}
 	},
 
+	// If for whatever reason the server goes down while it's delaying a match
+	// we want to make sure that it still tweets that match when the server is 
+	// back online. We write a record of the delayed matches into redis, and then
+	// load them back in on startup. Delaying is not a mistake or anything, it's
+	// to make sure result tweets go out in sync with stream delays (which are 
+	// reported by the API)
 	loadDelayedMatches: function() {
 		if(this.redis) {
 			// get the whole list.
@@ -608,8 +627,13 @@ exports.ResultsServer.prototype = {
 			// basis. So, here we're going to just build + maintain a hash of 
 			// league ids to stream delays and update it every time we run this 
 			// query, and check it when we're about to delay a tweet.
+			//
+			// This is the same for league_tier, which tells us how high profile
+			// a specific tournament is. We'll use the same pattern for tracking that.
+
 			_.each(this.liveGames, _.bind(function(game) {
 				this.leagueStreamDelays[game.league_id] = game.stream_delay_s;
+				this.leagueTier[game.league_id] = game.league_tier;
 			}, this));
 			this.emit("live-games:update");
 		}, this));
