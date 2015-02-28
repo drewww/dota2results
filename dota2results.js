@@ -409,6 +409,12 @@ exports.ResultsServer.prototype = {
 		// winston.info("logRecentMatch: " + match.match_id);
 		// winston.info("league: " + JSON.stringify(league));
 		// first, check it against the league listing.
+
+		// lets load the league_tier into the match data so it's cached
+		// properly.
+		match.league_tier = this.leagueTier[league.leagueid];
+		winston.info("Inserting league_tier ("+match.league_tier+") into match " + match.match_id);
+
 		if(_.contains(league.lastSeenMatchIds, match.match_id)) {
 			// winston.info("match_id (" + match.match_id + ") has been seen already: " + JSON.stringify(league.lastSeenMatchIds) + " for league " + league.league_id);
 			return;
@@ -423,7 +429,12 @@ exports.ResultsServer.prototype = {
 				winston.warn("Some weird issue with lastseen match ids: " + JSON.stringify(league));
 			}
 
-			// if we're still in init mode, don't tweet.
+			// This check is basically making sure that we have already initialized
+			// a league. If we haven't, every game in the league's history is going to
+			// trigger a catch-up tweet when the server starts. So for the first time
+			// we see a league, just store all its games and mark them as past.
+			// This works every time except for the first game in a league, and I don't
+			// super know what the right approach is there.
 			if(!league.init) {
 				// keep track of match ids that we want to tweet, and if they don't
 				// get successfully processed (ie the get match details call fails, which
@@ -435,6 +446,7 @@ exports.ResultsServer.prototype = {
 				winston.info("Delaying match handling for: " + match.match_id);
 				// push the match info into redis, in case the server restarts before
 				// we process this match.
+
 				this.saveDelayedMatch(match);
 
 				// now, we're going to issue a loadMatchDetails call that JUST sends
@@ -736,6 +748,7 @@ exports.ResultsServer.prototype = {
 	processMatchDetails: function(matchDetails, matchMetadata, lobbyInfo) {
 		// winston.info("matchDetails: " + JSON.stringify(matchDetails));
 		// winston.info("matchMetadata: " + JSON.stringify(matchMetadata));
+
 		var teams = [];
 		_.each(["radiant", "dire"], function(name) {
 			var team = {};
@@ -1039,6 +1052,9 @@ exports.ResultsServer.prototype = {
 		winston.info(JSON.stringify(results));
 
 		var isBlacklisted = _.contains(this.blacklistedLeagueIds, match.leagueid);
+
+		winston.info("ABOUT TO TWEET, LEAGUE TIER FROM MATCH OBJECT: " + match.league_tier);
+		winston.info("ABOUT TO TWEET, LEAGUE TIER FROM CACHE: " + this.leagueTier[match.leagueid]);
 
 		// write out the match data anyway so we can manually build files if we have to
 		fs.writeFileSync("games/match_" + match.match_id + ".json", JSON.stringify(results));
