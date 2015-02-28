@@ -159,7 +159,8 @@ exports.ResultsServer.prototype = {
 		this.tweet = _.throttle(this._tweet, 500);
 		this.altTweet = _.throttle(this._altTweet, 500);
 
-		this.blacklistedLeagueIds = JSON.parse(process.env.BLACKLISTED_LEAGUE_IDS);
+		// look for whitelisted leagueIds. 
+		this.whitelistedLeagueIds = JSON.parse(process.env.WHITELISTED_LEAGUE_IDS);
 
 		this.isDemo = isDemo;
 		this.isSilent = isSilent;
@@ -413,7 +414,7 @@ exports.ResultsServer.prototype = {
 		// lets load the league_tier into the match data so it's cached
 		// properly.
 		match.league_tier = this.leagueTier[league.leagueid];
-		winston.info("Inserting league_tier ("+match.league_tier+") into match " + match.match_id);
+		// winston.info("Inserting league_tier ("+match.league_tier+") into match " + match.match_id);
 
 		if(_.contains(league.lastSeenMatchIds, match.match_id)) {
 			// winston.info("match_id (" + match.match_id + ") has been seen already: " + JSON.stringify(league.lastSeenMatchIds) + " for league " + league.league_id);
@@ -1011,13 +1012,16 @@ exports.ResultsServer.prototype = {
 		}
 	},
 
+	// This functionality is unsupported, it caused lots of drama.
+	// DO NOT USE.
 	handleFinishedMatchEarly: function(match, matchMetadata) {
 		// this version of handle finished match is called as soon as we get a
 		// result, so we can get a non-delayed version of the results. It does
 		// some of the same things as handleFinishedMatch, but has some slightly
 		// different behaviors.
 		var results = this.processMatchDetails(match, matchMetadata);
-		var isBlacklisted = _.contains(this.blacklistedLeagueIds, match.leagueid);
+		var isBlacklisted = false;
+		// var isBlacklisted = _.contains(this.blacklistedLeagueIds, match.leagueid);
 
 		if(this.isValidMatch(results) && !isBlacklisted) {
 			winston.info("emailing for match: " + match.match_id);
@@ -1051,10 +1055,21 @@ exports.ResultsServer.prototype = {
 
 		winston.info(JSON.stringify(results));
 
-		var isBlacklisted = _.contains(this.blacklistedLeagueIds, match.leagueid);
+		// In this new regime, don't tweet based on the blacklist, follow new logics:
+		// 1. If it's a tier 3 league, tweet it.
+		// 2. If it's a tier 1 league, blacklist it.
+		// 3. Otherwise, blacklist it UNLESS it's in the WHITELIST.
 
-		winston.info("ABOUT TO TWEET, LEAGUE TIER FROM MATCH OBJECT: " + match.league_tier);
-		winston.info("ABOUT TO TWEET, LEAGUE TIER FROM CACHE: " + this.leagueTier[match.leagueid]);
+		var leagueTier = matchMetadata.league_tier;
+
+		if(leagueTier==3) {
+			altTweet = false;
+		} else if (leagueTier==1) {
+			altTweet = true;
+		} else {
+			// if the leagueId is in whitelisted league ids, then DON'T altTweet
+			altTweet = !_.contains(this.whitelistedLeagueIds, match.leagueid);
+		}
 
 		// write out the match data anyway so we can manually build files if we have to
 		fs.writeFileSync("games/match_" + match.match_id + ".json", JSON.stringify(results));
@@ -1081,7 +1096,7 @@ exports.ResultsServer.prototype = {
 
 				// now do a media tweet. eventually this will ahve both varieties,
 				// but for now will be just one.
-				if(!isBlacklisted) {
+				if(!altTweet) {
 					if(isSilent || isDemo) {
 						winston.info("Skipping media premier tweet");
 					} else {
@@ -1137,7 +1152,7 @@ exports.ResultsServer.prototype = {
 				this.states.removeLobby(lobbyInfo.lastSnapshot.lobby_id);
 
 				// we need to tweet normally, without an image.
-				if(!isBlacklisted) {
+				if(!altTweet) {
 					winston.info("TWEET (generate failed): " + results.message);
 					this.tweet(results.message, matchMetadata);
 				} else {
@@ -1154,7 +1169,7 @@ exports.ResultsServer.prototype = {
 			// when the second tweet attempt 
 
 			// do non-media tweets
-			if(!isBlacklisted) {
+			if(!altTweet) {
 				winston.info("NO TWEET (missing lobby info): " + results.message);
 				// this.tweet(results.message, matchMetadata);
 			} else {
