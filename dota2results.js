@@ -1097,8 +1097,9 @@ exports.ResultsServer.prototype = {
 				// the data on bot restart.
 				this.states.removeLobby(lobbyInfo.lastSnapshot.lobby_id);
 
-				// now do a media tweet. eventually this will ahve both varieties,
-				// but for now will be just one.
+
+				// this really should be abstracted; the logic is identical but for historical debugging
+				// reasons they're separate.
 				if(!useAltTweet) {
 					if(isSilent || isDemo) {
 						winston.info("Skipping media premier tweet");
@@ -1113,6 +1114,7 @@ exports.ResultsServer.prototype = {
 								
 								if(response.statusCode != 200) {
 									winston.error(body);
+									winston.info("Falling back to text tweet on primary account.");
 									this.tweet(results.message, matchMetadata);
 								}
 
@@ -1134,8 +1136,10 @@ exports.ResultsServer.prototype = {
 							try {
 								winston.info("post twitter alt media: " + err + "; " + response.statusCode);
 								
+								// if posting failed, note the error and tweet normally.
 								if(response.statusCode != 200) {
 									winston.error(body);
+									winston.info("Falling back to text tweet on alt account.");
 									this.altTweet(results.message, matchMetadata);
 								}
 
