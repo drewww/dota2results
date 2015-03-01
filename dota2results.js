@@ -1063,12 +1063,15 @@ exports.ResultsServer.prototype = {
 		var leagueTier = matchMetadata.league_tier;
 
 		if(leagueTier==3) {
-			altTweet = false;
+			useAltTweet = false;
+			winston.info("FOUND TIER 3 GAME - MAIN");
 		} else if (leagueTier==1) {
-			altTweet = true;
+			useAltTweet = true;
+			winston.info("FOUND TIER 1 GAME - ALT");
 		} else {
 			// if the leagueId is in whitelisted league ids, then DON'T altTweet
-			altTweet = !_.contains(this.whitelistedLeagueIds, match.leagueid);
+			useAltTweet = !_.contains(this.whitelistedLeagueIds, match.leagueid);
+			winston.info("FOUND TIER 2 GAME; USE ALT? " + useAltTweet);
 		}
 
 		// write out the match data anyway so we can manually build files if we have to
@@ -1096,7 +1099,7 @@ exports.ResultsServer.prototype = {
 
 				// now do a media tweet. eventually this will ahve both varieties,
 				// but for now will be just one.
-				if(!altTweet) {
+				if(!useAltTweet) {
 					if(isSilent || isDemo) {
 						winston.info("Skipping media premier tweet");
 					} else {
@@ -1152,7 +1155,7 @@ exports.ResultsServer.prototype = {
 				this.states.removeLobby(lobbyInfo.lastSnapshot.lobby_id);
 
 				// we need to tweet normally, without an image.
-				if(!altTweet) {
+				if(!useAltTweet) {
 					winston.info("TWEET (generate failed): " + results.message);
 					this.tweet(results.message, matchMetadata);
 				} else {
@@ -1169,7 +1172,7 @@ exports.ResultsServer.prototype = {
 			// when the second tweet attempt 
 
 			// do non-media tweets
-			if(!altTweet) {
+			if(!useAltTweet) {
 				winston.info("NO TWEET (missing lobby info): " + results.message);
 				// this.tweet(results.message, matchMetadata);
 			} else {
