@@ -1235,7 +1235,7 @@ exports.ResultsServer.prototype = {
 			return;
 		}
 
-		var b64content = fs.readFileSync('/tmp/' + filename, { encoding: 'base64'});
+		var b64content = fs.readFileSync(filename, { encoding: 'base64'});
 		t.post('media/upload',
 			{media: b64content},
 			_.bind(function (err, data, response) {
