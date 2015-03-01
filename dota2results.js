@@ -86,6 +86,7 @@ exports.ResultsServer.prototype = {
 	activeLeagueIds: null,
 
 	leagueStreamDelays: null,
+	leagueTier: null,
 
 	blacklistedLeagueIds: null,
 
@@ -110,6 +111,9 @@ exports.ResultsServer.prototype = {
 
 		// maps league_ids to stream delays, in seconds.
 		this.leagueStreamDelays = {};
+
+		// maps league_ids to league_tiers, an enumerated int: 1, 2, 3
+		this.leagueTier = {};
 
 		// the match details cache relates match_ids to a full
 		// JSON response from the server. They're cleaned out
@@ -155,7 +159,8 @@ exports.ResultsServer.prototype = {
 		this.tweet = _.throttle(this._tweet, 500);
 		this.altTweet = _.throttle(this._altTweet, 500);
 
-		this.blacklistedLeagueIds = JSON.parse(process.env.BLACKLISTED_LEAGUE_IDS);
+		// look for whitelisted leagueIds. 
+		this.whitelistedLeagueIds = JSON.parse(process.env.WHITELISTED_LEAGUE_IDS);
 
 		this.isDemo = isDemo;
 		this.isSilent = isSilent;
@@ -348,7 +353,7 @@ exports.ResultsServer.prototype = {
 
 		// this is artificially low for testing purposes.
 		// in production, probably set this high again.
-		var duration = 30*1000;
+		var duration = 90*1000;
 		if(this.isDemo) {
 			// we want to pick a random league that's not blacklisted
 			// and tweet from it occasionally.
@@ -372,6 +377,10 @@ exports.ResultsServer.prototype = {
 			}, this), 5000);
 		} else {
 			// now kick off a periodic live games update.
+			// this is the core loop for the bot;
+			// every `duraton` ms it hits liveLeagueGames
+			// and looks for a state change that we need to
+			// be aware of. 
 			this.updater = setInterval(_.bind(function() {
 				this.checkForLiveLeagueGames();
 
@@ -394,10 +403,19 @@ exports.ResultsServer.prototype = {
 		winston.info("DESTROY ResultsServer");
 	},
 
+	// when we're gong to actually process a completed match,
+	// this is the method to call. This will eventually lead
+	// to a tweet being fired off, if appropriate. 
 	logRecentMatch: function(match,league) {
 		// winston.info("logRecentMatch: " + match.match_id);
 		// winston.info("league: " + JSON.stringify(league));
 		// first, check it against the league listing.
+
+		// lets load the league_tier into the match data so it's cached
+		// properly.
+		match.league_tier = this.leagueTier[league.leagueid];
+		// winston.info("Inserting league_tier ("+match.league_tier+") into match " + match.match_id);
+
 		if(_.contains(league.lastSeenMatchIds, match.match_id)) {
 			// winston.info("match_id (" + match.match_id + ") has been seen already: " + JSON.stringify(league.lastSeenMatchIds) + " for league " + league.league_id);
 			return;
@@ -412,7 +430,12 @@ exports.ResultsServer.prototype = {
 				winston.warn("Some weird issue with lastseen match ids: " + JSON.stringify(league));
 			}
 
-			// if we're still in init mode, don't tweet.
+			// This check is basically making sure that we have already initialized
+			// a league. If we haven't, every game in the league's history is going to
+			// trigger a catch-up tweet when the server starts. So for the first time
+			// we see a league, just store all its games and mark them as past.
+			// This works every time except for the first game in a league, and I don't
+			// super know what the right approach is there.
 			if(!league.init) {
 				// keep track of match ids that we want to tweet, and if they don't
 				// get successfully processed (ie the get match details call fails, which
@@ -424,6 +447,7 @@ exports.ResultsServer.prototype = {
 				winston.info("Delaying match handling for: " + match.match_id);
 				// push the match info into redis, in case the server restarts before
 				// we process this match.
+
 				this.saveDelayedMatch(match);
 
 				// now, we're going to issue a loadMatchDetails call that JUST sends
@@ -466,6 +490,8 @@ exports.ResultsServer.prototype = {
 		}
 	},
 
+	// Lots of league-specific data is cached since that endpoint
+	// changes very infrequently. 
 	updateLeagueListing: function() {
 		winston.info("Updating league listing.");
 		this.api().getLeagueListing(_.bind(function(err, res) {
@@ -534,6 +560,12 @@ exports.ResultsServer.prototype = {
 		}
 	},
 
+	// If for whatever reason the server goes down while it's delaying a match
+	// we want to make sure that it still tweets that match when the server is 
+	// back online. We write a record of the delayed matches into redis, and then
+	// load them back in on startup. Delaying is not a mistake or anything, it's
+	// to make sure result tweets go out in sync with stream delays (which are 
+	// reported by the API)
 	loadDelayedMatches: function() {
 		if(this.redis) {
 			// get the whole list.
@@ -608,8 +640,13 @@ exports.ResultsServer.prototype = {
 			// basis. So, here we're going to just build + maintain a hash of 
 			// league ids to stream delays and update it every time we run this 
 			// query, and check it when we're about to delay a tweet.
+			//
+			// This is the same for league_tier, which tells us how high profile
+			// a specific tournament is. We'll use the same pattern for tracking that.
+
 			_.each(this.liveGames, _.bind(function(game) {
 				this.leagueStreamDelays[game.league_id] = game.stream_delay_s;
+				this.leagueTier[game.league_id] = game.league_tier;
 			}, this));
 			this.emit("live-games:update");
 		}, this));
@@ -712,6 +749,7 @@ exports.ResultsServer.prototype = {
 	processMatchDetails: function(matchDetails, matchMetadata, lobbyInfo) {
 		// winston.info("matchDetails: " + JSON.stringify(matchDetails));
 		// winston.info("matchMetadata: " + JSON.stringify(matchMetadata));
+
 		var teams = [];
 		_.each(["radiant", "dire"], function(name) {
 			var team = {};
@@ -974,13 +1012,16 @@ exports.ResultsServer.prototype = {
 		}
 	},
 
+	// This functionality is unsupported, it caused lots of drama.
+	// DO NOT USE.
 	handleFinishedMatchEarly: function(match, matchMetadata) {
 		// this version of handle finished match is called as soon as we get a
 		// result, so we can get a non-delayed version of the results. It does
 		// some of the same things as handleFinishedMatch, but has some slightly
 		// different behaviors.
 		var results = this.processMatchDetails(match, matchMetadata);
-		var isBlacklisted = _.contains(this.blacklistedLeagueIds, match.leagueid);
+		var isBlacklisted = false;
+		// var isBlacklisted = _.contains(this.blacklistedLeagueIds, match.leagueid);
 
 		if(this.isValidMatch(results) && !isBlacklisted) {
 			winston.info("emailing for match: " + match.match_id);
@@ -1014,7 +1055,24 @@ exports.ResultsServer.prototype = {
 
 		winston.info(JSON.stringify(results));
 
-		var isBlacklisted = _.contains(this.blacklistedLeagueIds, match.leagueid);
+		// In this new regime, don't tweet based on the blacklist, follow new logics:
+		// 1. If it's a tier 3 league, tweet it.
+		// 2. If it's a tier 1 league, blacklist it.
+		// 3. Otherwise, blacklist it UNLESS it's in the WHITELIST.
+
+		var leagueTier = matchMetadata.league_tier;
+
+		if(leagueTier==3) {
+			useAltTweet = false;
+			winston.info("FOUND TIER 3 GAME - MAIN");
+		} else if (leagueTier==1) {
+			useAltTweet = true;
+			winston.info("FOUND TIER 1 GAME - ALT");
+		} else {
+			// if the leagueId is in whitelisted league ids, then DON'T altTweet
+			useAltTweet = !_.contains(this.whitelistedLeagueIds, match.leagueid);
+			winston.info("FOUND TIER 2 GAME; USE ALT? " + useAltTweet);
+		}
 
 		// write out the match data anyway so we can manually build files if we have to
 		fs.writeFileSync("games/match_" + match.match_id + ".json", JSON.stringify(results));
@@ -1041,7 +1099,7 @@ exports.ResultsServer.prototype = {
 
 				// now do a media tweet. eventually this will ahve both varieties,
 				// but for now will be just one.
-				if(!isBlacklisted) {
+				if(!useAltTweet) {
 					if(isSilent || isDemo) {
 						winston.info("Skipping media premier tweet");
 					} else {
@@ -1097,7 +1155,7 @@ exports.ResultsServer.prototype = {
 				this.states.removeLobby(lobbyInfo.lastSnapshot.lobby_id);
 
 				// we need to tweet normally, without an image.
-				if(!isBlacklisted) {
+				if(!useAltTweet) {
 					winston.info("TWEET (generate failed): " + results.message);
 					this.tweet(results.message, matchMetadata);
 				} else {
@@ -1114,7 +1172,7 @@ exports.ResultsServer.prototype = {
 			// when the second tweet attempt 
 
 			// do non-media tweets
-			if(!isBlacklisted) {
+			if(!useAltTweet) {
 				winston.info("NO TWEET (missing lobby info): " + results.message);
 				// this.tweet(results.message, matchMetadata);
 			} else {
