@@ -1245,8 +1245,12 @@ exports.ResultsServer.prototype = {
 
 					// winston.error(err);
 					// winston.error(response);
+					if(t==this.twitter) {
+						this.tweet(string, match);						
+					} else {
+						this.altTweet(string, match);
+					}
 
-					this.tweet(string, match);
 				} else {
 					winston.info("Uploaded media: " + mediaIdStr);
 
