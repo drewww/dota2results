@@ -1241,10 +1241,11 @@ exports.ResultsServer.prototype = {
 			_.bind(function (err, data, response) {
 
 				if(err) {
-					winston.error(err);
-					winston.error(response);
-
 					winston.info("Falling back to text tweet.");
+
+					// winston.error(err);
+					// winston.error(response);
+
 					this.tweet(results.message, matchMetadata);
 				} else {
 					winston.info("Uploaded media: " + mediaIdStr);
