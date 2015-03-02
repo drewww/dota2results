@@ -1246,7 +1246,7 @@ exports.ResultsServer.prototype = {
 					// winston.error(err);
 					// winston.error(response);
 
-					this.tweet(results.message, matchMetadata);
+					this.tweet(string, matchMetadata);
 				} else {
 					winston.info("Uploaded media: " + mediaIdStr);
 
