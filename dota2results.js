@@ -1236,9 +1236,11 @@ exports.ResultsServer.prototype = {
 		}
 
 		winston.info("loading file: " + filename);
-		var b64content = fs.readFileSync(filename, { encoding: 'base64'});
-		winston.info("loaded content, length: " + b64content.length);
-		
+		var content = fs.readFileSync(filename);
+		winston.info("loaded content, length: " + content.length);
+
+		var b64content = content.toString('base64');
+		winston.info("b64 content length: " + b64content.length);
 		t.post('media/upload',
 			{media: b64content},
 			_.bind(function (err, data, response) {
