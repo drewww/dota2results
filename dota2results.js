@@ -1105,7 +1105,7 @@ exports.ResultsServer.prototype = {
 				} else {
 					var account = useAltTweet ? this.twitterAlt : this.twitter;
 					winston.info("TWEET MEDIA: " + results.shortMessage + " (to alt? " + useAltTweet + ")");
-						this._tweetMedia(account, results.shortMessage, matchMetadata, "/tmp/" + filename);
+					this._tweetMedia(account, results.shortMessage, matchMetadata, "/tmp/" + filename);
 				}
 			}, this));
 
@@ -1236,10 +1236,13 @@ exports.ResultsServer.prototype = {
 		}
 
 		var b64content = fs.readFileSync(filename, { encoding: 'base64'});
+
 		t.post('media/upload',
 			{media: b64content},
 			_.bind(function (err, data, response) {
-
+				winston.info("media upload callback firing");
+				winston.info("response: " + response);
+				winston.info("err: " + err);
 				if(err) {
 					winston.info("Falling back to text tweet.");
 
