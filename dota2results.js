@@ -9,11 +9,8 @@ var request = require('request'),
 	twit = require('twit'),
 	mandrill = require('mandrill-api/mandrill'),
 
-	twitter_update_with_media = require('./lib/twitter_update_with_media.js');
-
 	team_twitter = require('./lib/twitter_handles.js').teams,
 	GameStates = require('./lib/gamestate.js');
-
 
 
 if("REDISCLOUD_URL" in process.env) {
@@ -217,22 +214,6 @@ exports.ResultsServer.prototype = {
 		  , access_token:         process.env.TWITTER_ALT_ACCESS_TOKEN
 		  , access_token_secret:  process.env.TWITTER_ALT_ACCESS_TOKEN_SECRET
 		});
-
-		// note that this one has slightly different token names than
-		// the twit library (which doesn't support media)
-		// this.twitterAltMedia = new twitter_update_with_media({
-		//     consumer_key:         process.env.TWITTER_ALT_CONSUMER_KEY
-		//   , consumer_secret:      process.env.TWITTER_ALT_CONSUMER_SECRET
-		//   , token:         process.env.TWITTER_ALT_ACCESS_TOKEN
-		//   , token_secret:  process.env.TWITTER_ALT_ACCESS_TOKEN_SECRET
-		// });
-
-		// this.twitterMedia = new twitter_update_with_media({
-		//     consumer_key:         process.env.TWITTER_CONSUMER_KEY
-		//   , consumer_secret:      process.env.TWITTER_CONSUMER_SECRET
-		//   , token:         process.env.TWITTER_ACCESS_TOKEN
-		//   , token_secret:  process.env.TWITTER_ACCESS_TOKEN_SECRET
-		// });
 
 		// debouncing this call makes sure that it doesn't get called in rapid succession, which in some
 		// situations seemed to cause double tweeting / double processing of a single match. Adding a few
