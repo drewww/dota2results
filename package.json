@@ -19,7 +19,7 @@
     "url": "https://github.com/drewww/dota2results.git"
   },
   "dependencies": {
-    "twit": "1.1.x",
+    "twit": "1.1.20",
     "winston": "0.7.x",
     "request": "2.x",
     "dazzle": "*",
@@ -31,6 +31,6 @@
   },
   "license": "GPL v2",
   "engines": {
-    "node": "~0.12"
+    "node": "~0.10"
   }
 }

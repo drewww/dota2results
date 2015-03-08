@@ -9,11 +9,8 @@ var request = require('request'),
 	twit = require('twit'),
 	mandrill = require('mandrill-api/mandrill'),
 
-	twitter_update_with_media = require('./lib/twitter_update_with_media.js');
-
 	team_twitter = require('./lib/twitter_handles.js').teams,
 	GameStates = require('./lib/gamestate.js');
-
 
 
 if("REDISCLOUD_URL" in process.env) {
@@ -216,22 +213,6 @@ exports.ResultsServer.prototype = {
 		  , consumer_secret:      process.env.TWITTER_ALT_CONSUMER_SECRET
 		  , access_token:         process.env.TWITTER_ALT_ACCESS_TOKEN
 		  , access_token_secret:  process.env.TWITTER_ALT_ACCESS_TOKEN_SECRET
-		});
-
-		// note that this one has slightly different token names than
-		// the twit library (which doesn't support media)
-		this.twitterAltMedia = new twitter_update_with_media({
-		    consumer_key:         process.env.TWITTER_ALT_CONSUMER_KEY
-		  , consumer_secret:      process.env.TWITTER_ALT_CONSUMER_SECRET
-		  , token:         process.env.TWITTER_ALT_ACCESS_TOKEN
-		  , token_secret:  process.env.TWITTER_ALT_ACCESS_TOKEN_SECRET
-		});
-
-		this.twitterMedia = new twitter_update_with_media({
-		    consumer_key:         process.env.TWITTER_CONSUMER_KEY
-		  , consumer_secret:      process.env.TWITTER_CONSUMER_SECRET
-		  , token:         process.env.TWITTER_ACCESS_TOKEN
-		  , token_secret:  process.env.TWITTER_ACCESS_TOKEN_SECRET
 		});
 
 		// debouncing this call makes sure that it doesn't get called in rapid succession, which in some
@@ -1078,12 +1059,12 @@ exports.ResultsServer.prototype = {
 		fs.writeFileSync("games/match_" + match.match_id + ".json", JSON.stringify(results));
 
 		if(lobbyInfo) {
-			var success = boxscores.generate(lobbyInfo, results, _.bind(function(filename) {
+			var success = boxscores.generate(lobbyInfo, results, _.bind(function(base64image) {
 				// this method is called only on success. this is a little wonky for sure, but
 				// that's just the way it is.
 
 
-				winston.info("generation successful: " + filename);
+				winston.info("generation successful: (base64) " + base64image.length);
 				// if boxscores fails to generate, it represents some sort of major
 				// missing data like no tower data or no gold history data.
 				// (over time I'll make this more tight; expect at least one gold
@@ -1100,57 +1081,12 @@ exports.ResultsServer.prototype = {
 
 				// this really should be abstracted; the logic is identical but for historical debugging
 				// reasons they're separate.
-				if(!useAltTweet) {
-					if(isSilent || isDemo) {
-						winston.info("Skipping media premier tweet");
-					} else {
-						// NB that we're using results.shortMessage here, which should
-						// always have room for another 20 characters to tweet.
-
-						winston.info("TWEET MEDIA: " + results.shortMessage);
-						this.twitterMedia.post(results.shortMessage, "/tmp/" + filename, _.bind(function(err, response, body) {
-							try {
-								winston.info("post twitter media: " + err + "; " + response.statusCode);
-								
-								if(response.statusCode != 200) {
-									winston.error(body);
-									winston.info("Falling back to text tweet on primary account.");
-									this.tweet(results.message, matchMetadata);
-								}
-
-								winston.info("headers: " + Object.keys(response.headers));
-
-							} catch (e) {
-								winston.warn("exception posting twitter media response (minor): " + e);
-							}
-						}, this));	
-					}
+				if(isSilent || isDemo) {
+					winston.info("Skipping media tweet. Alt? " + useAltTweet);
 				} else {
-					if(isSilent || isDemo) {
-						winston.info("Skipping media alt tweet");
-					} else {
-						// NB that we're using results.shortMessage here, which should
-						// always have room for another 20 characters to tweet.
-						winston.info("TWEET.ALT MEDIA: " + results.shortMessage);
-						this.twitterAltMedia.post(results.shortMessage, "/tmp/" + filename, _.bind(function(err, response, body) {
-							try {
-								winston.info("post twitter alt media: " + err + "; " + response.statusCode);
-								
-								// if posting failed, note the error and tweet normally.
-								if(response.statusCode != 200) {
-									winston.error(body);
-									winston.info("Falling back to text tweet on alt account.");
-									this.altTweet(results.message, matchMetadata);
-								}
-
-								winston.info("headers: " + JSON.stringify(response.headers));
-
-
-							} catch (e) {
-								winston.warn("exception posting twitter alt media response (minor)");
-							}
-						}, this));	
-					}
+					var account = useAltTweet ? this.twitterAlt : this.twitter;
+					winston.info("TWEET MEDIA: " + results.shortMessage + " (to alt? " + useAltTweet + ")");
+					this._tweetMedia(account, results.shortMessage, matchMetadata, base64image);
 				}
 			}, this));
 
@@ -1272,6 +1208,56 @@ exports.ResultsServer.prototype = {
 	  				winston.debug("Twitter reply: " + reply + " (err: " + err + ")");
 				}
   		}, this));
+	},
+
+	_tweetMedia: function(t, string, match, base64image) {
+		if(this.isDemo || this.isSilent) {
+			this.removeMatchFromQueue(match);
+			return;
+		}
+
+		// winston.info("loading file: " + filename);
+		// var content = fs.readFileSync(filename);
+		// winston.info("loaded content, length: " + content.length);
+
+		var b64content = base64image;
+		winston.info("b64 content length: " + b64content.length);
+		t.post('media/upload',
+			{media: b64content},
+			_.bind(function (err, data, response) {
+				winston.info("media upload callback firing");
+				winston.info("response: " + response);
+				winston.info("err: " + err);
+				if(err) {
+					winston.info("Falling back to text tweet.");
+
+					// winston.error(err);
+					// winston.error(response);
+					if(t==this.twitter) {
+						this.tweet(string, match);						
+					} else {
+						this.altTweet(string, match);
+					}
+
+				} else {
+					winston.info("Uploaded media: " + mediaIdStr);
+
+					var mediaIdStr = data.media_id_string;
+					var params = { status: string, media_ids: [mediaIdStr] };
+
+					t.post('statuses/update', params,
+						_.bind(function(err, data, response) {
+							if(err) {
+								if(err.message.indexOf('duplicate')!=-1 || err.message.indexOf('update limit')!=-1) {
+				  					winston.info("Error posting, duplicate or over limit - drop.");
+				  					this.removeMatchFromQueue(match);
+	  							}
+							} else {
+								winston.info("Posted media tweet successfully: " + response);
+							}
+						}, this));
+				}
+			}, this));
 	},
 
 	email: function(string, match) {
