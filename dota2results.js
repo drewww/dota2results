@@ -1078,12 +1078,12 @@ exports.ResultsServer.prototype = {
 		fs.writeFileSync("games/match_" + match.match_id + ".json", JSON.stringify(results));
 
 		if(lobbyInfo) {
-			var success = boxscores.generate(lobbyInfo, results, _.bind(function(filename) {
+			var success = boxscores.generate(lobbyInfo, results, _.bind(function(base64image) {
 				// this method is called only on success. this is a little wonky for sure, but
 				// that's just the way it is.
 
 
-				winston.info("generation successful: " + filename);
+				winston.info("generation successful: (base64) " + base64image.length);
 				// if boxscores fails to generate, it represents some sort of major
 				// missing data like no tower data or no gold history data.
 				// (over time I'll make this more tight; expect at least one gold
@@ -1105,7 +1105,7 @@ exports.ResultsServer.prototype = {
 				} else {
 					var account = useAltTweet ? this.twitterAlt : this.twitter;
 					winston.info("TWEET MEDIA: " + results.shortMessage + " (to alt? " + useAltTweet + ")");
-					this._tweetMedia(account, results.shortMessage, matchMetadata, "/tmp/" + filename);
+					this._tweetMedia(account, results.shortMessage, matchMetadata, base64image);
 				}
 			}, this));
 
@@ -1229,17 +1229,17 @@ exports.ResultsServer.prototype = {
   		}, this));
 	},
 
-	_tweetMedia: function(t, string, match, filename) {
+	_tweetMedia: function(t, string, match, base64image) {
 		if(this.isDemo || this.isSilent) {
 			this.removeMatchFromQueue(match);
 			return;
 		}
 
-		winston.info("loading file: " + filename);
-		var content = fs.readFileSync(filename);
-		winston.info("loaded content, length: " + content.length);
+		// winston.info("loading file: " + filename);
+		// var content = fs.readFileSync(filename);
+		// winston.info("loaded content, length: " + content.length);
 
-		var b64content = content.toString('base64');
+		var b64content = base64image;
 		winston.info("b64 content length: " + b64content.length);
 		t.post('media/upload',
 			{media: b64content},
@@ -1274,7 +1274,7 @@ exports.ResultsServer.prototype = {
 							} else {
 								winston.info("Posted media tweet successfully: " + response);
 							}
-						}));
+						}, this));
 				}
 			}, this));
 	},
