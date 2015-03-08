@@ -29,18 +29,16 @@ The boxscore image generating system is a whole other situation. As of June 2014
 To deal with these issues, there is a major new module, `lib/gamestate.js`, which manages the details of tracking status-over-time of all open league games. The main `dota2results.js` script calls GetLiveLeagueGames every 20 or so seconds and sends the resulting snapshots of each game over to a GameStateTracker object for processing. The GameStateTracker has three major functions:
 
  1. Ignore duplicate snapshots (we generally see the same snapshot 4-6 times before we get a genuinely new one)
- 2. Generate total gold differential data. In this version, this is a net income differential that is calculated by multiplying the per-player GPM rates by the game time and subtracting the team totals from each other. Future versions might instead use a net worth formula that sums up item values + gold on hand to get actual value to better account for buybacks + lost/sold items. But given that the in-game chart still uses the former method (afaict) we'll stick with that one for now.
+ 2. Generate total gold differential data. Historically this was very painful, but net work is now reported in the API, which is great.
  3. Detect towers falling. Each snapshot includes a bit mask that encodes tower states. Extract diffs in these masks to determine which towers fell and who to attribute them to, isolating these events into a single list of towers-that-fell. 
+ 4. Detect barracks falling. Same method as above, although it seems to work a lot less well for reasons I have not yet figured out.
 
-There are some big gaps in what is available from the GetLiveLeagueGames call.
+GetLiveLeagueGames has improved dramatically in the last year, but there are some big gaps in what is available:
 
- * Barracks and ancient status is not reported. This is really annoying, and limits our ability to make the best visualizations.
- * The game winner is not available in a formal way. We can detect lobbies closing because they stop getting returned by GetLiveLeagueGames and we could maybe infer the winner most of the time, but it's not reported formally.
- * Gold data is not reported directly and is inferred by GPM information.
+ * The game winner is not available in a formal way. We can detect lobbies closing because they stop getting returned by GetLiveLeagueGames and we could maybe infer the winner most of the time, but it's not reported directly.
  * Kill data as reported by the final scoreboard doesn't seem to match kill data reported by GetMatchDetails.
  * The time of the final snapshot is usually substantially lower than the time reported in GetMatchDetails.
- * Series-oriented data is not available.
- * Games are organized by lobby_id, which is a transient id that is separate from the more enduring match_id. 
+ * Games are organized by lobby_id, which is a transient id that is separate from the more enduring match_id, which makes matching lobby data back to match data a little squishy.
 
 This data is accumulated over time. When the normal game-end detection system from the primary `dota2results.js` logic identifies that a game has finished, it looks up GameStates that seem to match the GetMatchDetails information, relying on league_id and team_id. Merging the MatchDetails object with the accumulated GameState object gives us enough data to make a good visualization.
 
@@ -57,10 +55,12 @@ Contribution
 
 If you're interested in contributing, I can always use help keeping track of Twitter handles for teams. You can find the instructions for doing that in `lib/twitter_handles.js`. 
 
+Recent Improvements
+-------------------
+  * Auto-generate images to include in the tweets that provide a visual summary of the match, ala the end-game scoreboard.
+  * Now reads premier/professional/amateur status so long term whitelisting is less burdensom.
+
 Future Directions
 -----------------
 
-  * Auto-generate images to include in the tweets that provide a visual summary of the match, ala the end-game scoreboard.
-  * Live-tweet significant moments in matches (ie big team fights, towers going down, etc); requires access to the real time DotaTV stream or other real-time data.
-  * Find a way to tap into the premier/professional/amateur categories to auto-group tournaments into different categories.
-  * Provide an email list for people who want non-delayed results (this is primarily for people in esports production roles who need advance notice for production tasks)
+  * Live-tweet significant moments in matches (ie big team fights, towers going down, etc); requires access to the real time DotaTV stream or other real-time data. 
