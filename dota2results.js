@@ -905,8 +905,8 @@ exports.ResultsServer.prototype = {
 
 		var league = this.leagues[matchDetails.leagueid];
 
-		if(matchDetails.leagueid==600) {
-			league.name = "The International 2014 #ti4";
+		if(matchDetails.leagueid==2733) {
+			league.name = "The International 2015 #ti5";
 		}
 
 		// drop the word "ticket" in all situations
