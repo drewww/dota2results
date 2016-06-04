@@ -711,7 +711,8 @@ exports.ResultsServer.prototype = {
 		}
 
 		this.api().getMatchDetails(matchMetadata.match_id, _.bind(function(err, match) {
-			if(err || match.error) {
+
+			if(err || _.isUndefined(match) || match.error) {
 				winston.error("error loading match: " + err);
 				// in this case we DON'T pull it from the queue; we want to retry
 				// these. But any other type of error we want to toss it.
@@ -1016,6 +1017,12 @@ exports.ResultsServer.prototype = {
 		// okay, now lets look up the detailed lobby info.
 		var lobbyInfo = this.states.getLobbyByTeamAndLeague(
 			[match.radiant_team_id, match.dire_team_id], match.leagueid);
+
+		if(lobbyInfo===false) {
+			winston.warn("Returned no lobby info for team/league combo. Moving on.");
+			this.removeMatchFromQueue(matchMetadata);
+			return;
+		}
 
 		// make the lobbyInfo available to processMatchDetails if possible. 
 		try {
