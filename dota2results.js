@@ -714,9 +714,9 @@ exports.ResultsServer.prototype = {
 
 			if(err || _.isUndefined(match) || match.error) {
 				winston.error("error loading match: " + err);
-				// in this case we DON'T pull it from the queue; we want to retry
+				// in these cases we DON'T pull it from the queue; we want to retry
 				// these. But any other type of error we want to toss it.
-				if(match.error) {
+				if(_.isUndefined(match) || match.error) {
 					this.removeMatchFromQueue(matchMetadata);
 				}
 				return;
