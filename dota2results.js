@@ -134,6 +134,12 @@ exports.ResultsServer.prototype = {
 
 		this.matchesToTweet = [];
 
+		this.blacklistedLeagueIds = []
+		if("BLACKLISTED_LEAGUES" in process.env) {
+			this.blacklistedLeagueIds = JSON.parse(process.env.BLACKLISTED_LEAGUES);
+			winston.info("Initialized blacklisted leagues: " + JSON.stringify(this.blacklistedLeagueIds))
+		}
+
 		// activeSeriesIds tracks the win/loss patterns in currently-active
 		// series (ie bo3, bo5, etc)
 		// individual games don't return this information, but the match_history
@@ -499,6 +505,11 @@ exports.ResultsServer.prototype = {
 
 			winston.info("Loaded " + Object.keys(this.leagues).length + " leagues.");
 
+			if(this.isSilent) {
+				// dump all league inf
+				winston.info("leagues: " + JSON.stringify(this.leagues));				
+			}
+
 			this.lastLeagueUpdate = new Date().getTime();
 
 			this.emit("leagues:update");
@@ -713,10 +724,10 @@ exports.ResultsServer.prototype = {
 		this.api().getMatchDetails(matchMetadata.match_id, _.bind(function(err, match) {
 
 			if(err || _.isUndefined(match) || match.error) {
-				winston.error("error loading match: " + err);
+				winston.error("error loading match: " + err + " " + match);
 				// in these cases we DON'T pull it from the queue; we want to retry
 				// these. But any other type of error we want to toss it.
-				if(_.isUndefined(match) || match.error) {
+				if(match.error) {
 					this.removeMatchFromQueue(matchMetadata);
 				}
 				return;
@@ -1050,7 +1061,12 @@ exports.ResultsServer.prototype = {
 
 		var leagueTier = matchMetadata.league_tier;
 
-		if(leagueTier==3) {
+		if(!_.contains(this.blacklistedLeagueIds, match.leagueid)) {
+			useAltTweet = false;
+			winston.info("Found game from blacklisted league, ignoring.");
+			this.removeMatchFromQueue(matchMetadata);
+			return;
+		} else if(leagueTier==3) {
 			useAltTweet = false;
 			winston.info("FOUND TIER 3 GAME - MAIN");
 		} else if (leagueTier==1) {
@@ -1198,6 +1214,7 @@ exports.ResultsServer.prototype = {
 	},
 
 	_tweet: function(string, match) {
+		winston.info("TWEET: " + string);
 		if(this.isDemo || this.isSilent) {
 			this.removeMatchFromQueue(match);
 			return;
@@ -1218,6 +1235,8 @@ exports.ResultsServer.prototype = {
 	},
 
 	_tweetMedia: function(t, string, match, base64image) {
+		winston.info("TWEET " + string);
+
 		if(this.isDemo || this.isSilent) {
 			this.removeMatchFromQueue(match);
 			return;

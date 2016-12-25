@@ -16,3 +16,5 @@ export BLACKLISTED_LEAGUE_IDS='[]'
 export MANDRILL_KEY='...'
 
 export REDISCLOUD_URL='...'
+
+export BLACKLISTED_LEAGUES='...'
